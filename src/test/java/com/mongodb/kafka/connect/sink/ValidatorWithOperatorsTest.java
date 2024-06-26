@@ -19,19 +19,20 @@
 package com.mongodb.kafka.connect.sink;
 
 import static com.mongodb.kafka.connect.util.Validators.ValidatorWithOperators;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.regex.Pattern;
 
 import org.apache.kafka.common.config.ConfigException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
+
+import com.mongodb.client.model.changestream.FullDocument;
 
 import com.mongodb.kafka.connect.util.Validators;
 
-@RunWith(JUnitPlatform.class)
 class ValidatorWithOperatorsTest {
   private static final String NAME = "name";
   private static final Object ANY_VALUE = null;
@@ -96,5 +97,25 @@ class ValidatorWithOperatorsTest {
   void invalidateArithmeticOr() {
     assertThrows(ConfigException.class, () -> FAIL.or(FAIL).ensureValid(NAME, ANY_VALUE));
     assertThrows(ConfigException.class, () -> FAIL.or(FAIL).or(FAIL).ensureValid(NAME, ANY_VALUE));
+  }
+
+  @Test
+  @DisplayName("Enum validator and recommender case sensitivity")
+  void enumValidatorAndRecommender() {
+    Validators.EnumValidatorAndRecommender caseInsenstiveValidator =
+        Validators.EnumValidatorAndRecommender.in(
+            MongoSinkTopicConfig.FieldProjectionType.values());
+    assertDoesNotThrow(() -> caseInsenstiveValidator.ensureValid("myConfig", "AlLoWLisT"));
+    assertDoesNotThrow(() -> caseInsenstiveValidator.ensureValid("myConfig", "bloCKLIST"));
+
+    Validators.EnumValidatorAndRecommender caseSensitiveValidator =
+        Validators.EnumValidatorAndRecommender.in(FullDocument.values(), FullDocument::getValue);
+
+    assertDoesNotThrow(() -> caseSensitiveValidator.ensureValid("myConfig", "updateLookup"));
+    ConfigException e =
+        assertThrows(
+            ConfigException.class,
+            () -> caseSensitiveValidator.ensureValid("myConfig", "updatelookup"));
+    assertTrue(e.getMessage().contains("updateLookup"));
   }
 }

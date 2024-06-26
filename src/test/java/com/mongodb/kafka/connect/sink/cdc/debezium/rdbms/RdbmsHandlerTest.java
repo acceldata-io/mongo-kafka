@@ -35,8 +35,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 
 import org.bson.BsonDocument;
 
@@ -47,7 +45,6 @@ import com.mongodb.client.model.WriteModel;
 import com.mongodb.kafka.connect.sink.cdc.debezium.OperationType;
 import com.mongodb.kafka.connect.sink.converter.SinkDocument;
 
-@RunWith(JUnitPlatform.class)
 class RdbmsHandlerTest {
   private static final RdbmsHandler RDBMS_HANDLER_DEFAULT_MAPPING =
       new RdbmsHandler(createTopicConfig());
@@ -126,6 +123,19 @@ class RdbmsHandlerTest {
     SinkDocument cdcEvent =
         new SinkDocument(BsonDocument.parse("{id: 1234}"), BsonDocument.parse("{po: null}"));
     assertThrows(DataException.class, () -> RDBMS_HANDLER_DEFAULT_MAPPING.handle(cdcEvent));
+  }
+
+  @Test
+  @DisplayName("when value doc is a ddl event")
+  void testDDLEvent() {
+    assertEquals(
+        Optional.empty(),
+        RDBMS_HANDLER_DEFAULT_MAPPING.handle(
+            new SinkDocument(
+                new BsonDocument(),
+                BsonDocument.parse(
+                    "{\"ddl\": \"ALTER TABLE customers ADD middle_name varchar(255) AFTER first_name\"}"))),
+        "ddl event must result in Optional.empty()");
   }
 
   @TestFactory

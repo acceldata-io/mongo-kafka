@@ -41,8 +41,6 @@ import org.apache.kafka.connect.data.Struct;
 import org.apache.kafka.connect.data.Timestamp;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 
 import org.bson.BsonDocument;
 import org.bson.RawBsonDocument;
@@ -51,7 +49,6 @@ import org.bson.json.JsonWriterSettings;
 import com.mongodb.kafka.connect.source.json.formatter.ExtendedJson;
 import com.mongodb.kafka.connect.source.json.formatter.SimplifiedJson;
 
-@RunWith(JUnitPlatform.class)
 public class SchemaAndValueProducerTest {
 
   private static final String FULL_DOCUMENT_JSON =
@@ -163,7 +160,7 @@ public class SchemaAndValueProducerTest {
                 SchemaBuilder.array(
                         SchemaBuilder.struct()
                             .field("a", Schema.OPTIONAL_INT32_SCHEMA)
-                            .name("arrayComplex_a")
+                            .name("arrayComplex")
                             .optional()
                             .build())
                     .optional()
@@ -171,7 +168,12 @@ public class SchemaAndValueProducerTest {
                     .build())
             .field(
                 "arrayComplexMixedTypes",
-                SchemaBuilder.array(Schema.OPTIONAL_STRING_SCHEMA)
+                SchemaBuilder.array(
+                        SchemaBuilder.struct()
+                            .field("a", Schema.OPTIONAL_STRING_SCHEMA)
+                            .name("arrayComplexMixedTypes")
+                            .optional()
+                            .build())
                     .optional()
                     .name("arrayComplexMixedTypes")
                     .build())
@@ -221,6 +223,8 @@ public class SchemaAndValueProducerTest {
             .build();
 
     Schema arrayComplexValueSchema = expectedSchema.field("arrayComplex").schema().valueSchema();
+    Schema arrayComplexMixedTypesValueSchema =
+        expectedSchema.field("arrayComplexMixedTypes").schema().valueSchema();
     Schema documentSchema = expectedSchema.field("document").schema();
 
     SchemaAndValue expectedSchemaAndValue =
@@ -235,7 +239,11 @@ public class SchemaAndValueProducerTest {
                         new Struct(arrayComplexValueSchema).put("a", 1),
                         new Struct(arrayComplexValueSchema).put("a", 2)))
                 .put("arrayMixedTypes", asList("1", "2", "true", "[1, 2, 3]", "{\"a\": 2}"))
-                .put("arrayComplexMixedTypes", asList("{\"a\": 1}", "{\"a\": \"a\"}"))
+                .put(
+                    "arrayComplexMixedTypes",
+                    asList(
+                        new Struct(arrayComplexMixedTypesValueSchema).put("a", "1"),
+                        new Struct(arrayComplexMixedTypesValueSchema).put("a", "a")))
                 .put("binary", Base64.getDecoder().decode("S2Fma2Egcm9ja3Mh"))
                 .put("boolean", true)
                 .put("code", "{\"$code\": \"int i = 0;\"}")
@@ -282,8 +290,6 @@ public class SchemaAndValueProducerTest {
     assertAll(
         "Assert schema and value matches",
         () -> assertEquals(Schema.BYTES_SCHEMA.schema(), actual.schema()),
-        // Ensure the data length is truncated.
-        () -> assertEquals(1071, ((byte[]) actual.value()).length),
         () -> assertEquals(CHANGE_STREAM_DOCUMENT, new RawBsonDocument((byte[]) actual.value())));
 
     RawBsonDocument rawBsonDocument = RawBsonDocument.parse(CHANGE_STREAM_DOCUMENT_JSON);
@@ -291,8 +297,6 @@ public class SchemaAndValueProducerTest {
     assertAll(
         "Assert schema and value matches for raw bson document",
         () -> assertEquals(Schema.BYTES_SCHEMA.schema(), rawSchemaValue.schema()),
-        // Ensure the data length is truncated.
-        () -> assertEquals(1071, ((byte[]) rawSchemaValue.value()).length),
         () ->
             assertEquals(
                 CHANGE_STREAM_DOCUMENT, new RawBsonDocument((byte[]) rawSchemaValue.value())));
@@ -302,8 +306,6 @@ public class SchemaAndValueProducerTest {
     assertAll(
         "Assert schema and value matches for raw bson sub document",
         () -> assertEquals(Schema.BYTES_SCHEMA.schema(), rawSchemaValueForSubDocument.schema()),
-        // Ensure the data length is truncated.
-        () -> assertEquals(615, ((byte[]) rawSchemaValueForSubDocument.value()).length),
         () ->
             assertEquals(
                 CHANGE_STREAM_DOCUMENT.getDocument("fullDocument"),
@@ -315,6 +317,7 @@ public class SchemaAndValueProducerTest {
       {
         put("_id", "{\"_data\": \"5f15aab12435743f9bd126a4\"}");
         put("operationType", "<operation>");
+        put("fullDocumentBeforeChange", getFullDocumentBeforeChange(simplified));
         put("fullDocument", getFullDocument(simplified));
         put(
             "ns",
@@ -353,6 +356,10 @@ public class SchemaAndValueProducerTest {
             });
       }
     };
+  }
+
+  private static String getFullDocumentBeforeChange(final boolean simplified) {
+    return getFullDocument(simplified);
   }
 
   static String getFullDocument(final boolean simplified) {
@@ -395,6 +402,7 @@ public class SchemaAndValueProducerTest {
     return format(
         "{\"_id\": {\"_data\": \"5f15aab12435743f9bd126a4\"},"
             + " \"operationType\": \"<operation>\","
+            + " \"fullDocumentBeforeChange\": %s,"
             + " \"fullDocument\": %s,"
             + " \"ns\": {\"db\": \"<database>\", \"coll\": \"<collection>\"},"
             + " \"to\": {\"db\": \"<to_database>\", \"coll\": \"<to_collection>\"},"
@@ -406,6 +414,7 @@ public class SchemaAndValueProducerTest {
             + " \"txnNumber\": 987654321,"
             + " \"lsid\": {\"id\": %s, \"uid\": %s}"
             + "}",
+        getFullDocumentBeforeChange(simplified),
         getFullDocument(simplified),
         getDocumentKey(simplified),
         getUpdatedField(simplified),

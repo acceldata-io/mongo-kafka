@@ -23,16 +23,24 @@ import static com.mongodb.kafka.connect.source.MongoSourceConfig.OUTPUT_FORMAT_V
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.OUTPUT_SCHEMA_KEY_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.OUTPUT_SCHEMA_VALUE_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.PIPELINE_CONFIG;
+import static com.mongodb.kafka.connect.util.jmx.internal.MBeanServerUtils.getMBeanAttributes;
+import static com.mongodb.kafka.connect.util.jmx.internal.MBeanServerUtils.getMBeanDescriptionFor;
 import static java.util.Collections.singletonList;
 import static java.util.stream.Collectors.toList;
 import static java.util.stream.IntStream.rangeClosed;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -54,7 +62,9 @@ import com.mongodb.kafka.connect.log.LogCapture;
 import com.mongodb.kafka.connect.mongodb.MongoKafkaTestCase;
 import com.mongodb.kafka.connect.source.MongoSourceConfig;
 import com.mongodb.kafka.connect.source.MongoSourceConfig.OutputFormat;
+import com.mongodb.kafka.connect.source.MongoSourceConfig.StartupConfig.StartupMode;
 import com.mongodb.kafka.connect.source.MongoSourceTask;
+import com.mongodb.kafka.connect.util.jmx.SourceTaskStatistics;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -99,6 +109,37 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
         () -> assertProduced(createInserts(1, 60), coll2),
         () -> assertProduced(createInserts(1, 70), coll3),
         () -> assertProduced(createInserts(51, 60), coll4));
+    assertMetrics();
+
+    Map<String, Map<String, Long>> mBeansMap = getMBeanAttributes("com.mongodb.kafka.connect:*");
+    Map<String, Long> empty =
+        mBeansMap.remove(
+            "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-copy-existing-0");
+    for (Map.Entry<String, Long> entry : empty.entrySet()) {
+      assertEquals(0, entry.getValue(), entry.getKey());
+    }
+    for (Map<String, Long> attrs : mBeansMap.values()) {
+      assertMBeanAttributesRecorded(attrs, false);
+    }
+  }
+
+  private void assertMBeanAttributesRecorded(
+      final Map<String, Long> attrs, final boolean skipInitiating) {
+    assertNotEquals(0, attrs.get("records"));
+    assertEquals(0, attrs.get("records-filtered"));
+    assertNotEquals(0, attrs.get("records-acknowledged"));
+    assertNotEquals(0, attrs.get("mongodb-bytes-read"));
+    // skip "latest-offset-secs"
+    assertNotEquals(0, attrs.get("in-task-poll"));
+    if (attrs.get("in-task-poll") > 1) {
+      assertNotEquals(0, attrs.get("in-connect-framework"));
+    }
+    if (!skipInitiating) {
+      assertNotEquals(0, attrs.get("initial-commands-successful"));
+    }
+    assertNotEquals(0, attrs.get("getmore-commands-successful"));
+    assertEquals(0, attrs.get("initial-commands-failed"));
+    assertEquals(0, attrs.get("getmore-commands-failed"));
   }
 
   @Test
@@ -106,7 +147,8 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
   void testSourceLoadsDataFromMongoClientWithCopyExisting() {
     assumeTrue(isGreaterThanThreeDotSix());
     Properties sourceProperties = new Properties();
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
 
     MongoDatabase db1 = getDatabaseWithPostfix();
     MongoDatabase db2 = getDatabaseWithPostfix();
@@ -133,6 +175,22 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
         () -> assertProduced(createInserts(1, 60), coll2),
         () -> assertProduced(createInserts(1, 70), coll3),
         () -> assertProduced(createInserts(51, 60), coll4));
+    assertMetrics();
+
+    Map<String, Map<String, Long>> mBeansMap = getMBeanAttributes("com.mongodb.kafka.connect:*");
+    assertMBeanAttributesRecorded(
+        mBeansMap.get(
+            "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-copy-existing-0"),
+        false);
+    assertMBeanAttributesRecorded(
+        mBeansMap.get(
+            "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-change-stream-0"),
+        true);
+    assertMBeanAttributesRecorded(
+        mBeansMap.get(
+            "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-0"),
+        false);
+    assertEquals(3, mBeansMap.size());
   }
 
   @Test
@@ -147,11 +205,13 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
     sourceProperties.put(MongoSourceConfig.DATABASE_CONFIG, coll.getNamespace().getDatabaseName());
     sourceProperties.put(
         MongoSourceConfig.COLLECTION_CONFIG, coll.getNamespace().getCollectionName());
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
     addSourceConnector(sourceProperties);
 
     insertMany(rangeClosed(51, 100), coll);
     assertProduced(createInserts(1, 100), coll);
+    assertMetrics();
   }
 
   @Test
@@ -166,7 +226,8 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
     sourceProperties.put(MongoSourceConfig.DATABASE_CONFIG, coll.getNamespace().getDatabaseName());
     sourceProperties.put(
         MongoSourceConfig.COLLECTION_CONFIG, coll.getNamespace().getCollectionName());
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
     sourceProperties.put(OUTPUT_FORMAT_KEY_CONFIG, OutputFormat.BSON.name());
     sourceProperties.put(MongoSourceConfig.OUTPUT_FORMAT_VALUE_CONFIG, OutputFormat.BSON.name());
     sourceProperties.put("key.converter", "org.apache.kafka.connect.converters.ByteArrayConverter");
@@ -177,6 +238,7 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
 
     insertMany(rangeClosed(51, 100), coll);
     assertProduced(createInserts(1, 100), coll, OutputFormat.BSON);
+    assertMetrics();
   }
 
   @Test
@@ -199,10 +261,12 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
     insertMany(rangeClosed(1, 50), coll3);
 
     Properties sourceProperties = new Properties();
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
     String namespaceRegex =
         String.format("(%s\\.coll1|%s\\.coll(1|3))", db1.getName(), db2.getName());
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_NAMESPACE_REGEX_CONFIG, namespaceRegex);
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_COPY_EXISTING_NAMESPACE_REGEX_CONFIG, namespaceRegex);
 
     addSourceConnector(sourceProperties);
 
@@ -216,6 +280,7 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
     assertProduced(createInserts(51, 100), coll22);
     assertProduced(createInserts(1, 100), coll23);
     assertProduced(createInserts(51, 100), coll3);
+    assertMetrics();
   }
 
   @Test
@@ -227,7 +292,8 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
 
     Properties sourceProperties = new Properties();
     sourceProperties.put(MongoSourceConfig.DATABASE_CONFIG, coll.getNamespace().getDatabaseName());
-    sourceProperties.put(MongoSourceConfig.COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(
+        MongoSourceConfig.STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
 
     sourceProperties.put(OUTPUT_FORMAT_KEY_CONFIG, OutputFormat.SCHEMA.name());
     sourceProperties.put(
@@ -272,6 +338,7 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
     assertIterableEquals(
         produced.stream().map(ConsumerRecord::value).collect(toList()),
         expected.stream().map(ConsumerRecord::value).collect(toList()));
+    assertMetrics();
   }
 
   @Test
@@ -297,6 +364,8 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
       insertMany(rangeClosed(1, 50), coll);
       insertMany(rangeClosed(1, 50), altColl);
       getProducedStrings(heartbeatTopic, 1);
+
+      assertMetrics();
 
       stopStartSourceConnector(sourceProperties);
 
@@ -334,6 +403,7 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
 
     assertTrue(heartbeat.get("key").isDocument());
     assertTrue(heartbeat.get("value").isNull());
+    assertMetrics();
   }
 
   @Test
@@ -359,6 +429,23 @@ public class MongoSourceConnectorIntegrationTest extends MongoKafkaTestCase {
 
       assertTrue(containsIllegalChangeStreamOperation);
     }
+  }
+
+  private void assertMetrics() {
+    Set<String> names = SourceTaskStatistics.DESCRIPTIONS.keySet();
+
+    String mBeanName =
+        "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-0";
+    Map<String, Map<String, Long>> mBeansMap = getMBeanAttributes(mBeanName);
+    assertTrue(mBeansMap.size() > 0);
+    for (Map.Entry<String, Map<String, Long>> entry : mBeansMap.entrySet()) {
+      assertEquals(
+          names, entry.getValue().keySet(), "Mismatched MBean attributes for " + entry.getKey());
+      entry.getValue().keySet().forEach(n -> assertNotNull(getMBeanDescriptionFor(mBeanName, n)));
+    }
+    Set<String> initialNames = new HashSet<>();
+    new SourceTaskStatistics("name").emit(v -> initialNames.add(v.getName()));
+    assertEquals(names, initialNames, "Attributes must not be added after construction");
   }
 
   public static class KeyValueDeserializer implements Deserializer<Integer> {

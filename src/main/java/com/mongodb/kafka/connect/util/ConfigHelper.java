@@ -17,7 +17,9 @@ package com.mongodb.kafka.connect.util;
 
 import static java.lang.String.format;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.BiFunction;
 
@@ -35,6 +37,7 @@ import com.mongodb.client.model.CollationCaseFirst;
 import com.mongodb.client.model.CollationMaxVariable;
 import com.mongodb.client.model.CollationStrength;
 import com.mongodb.client.model.changestream.FullDocument;
+import com.mongodb.client.model.changestream.FullDocumentBeforeChange;
 
 import com.mongodb.kafka.connect.Versions;
 
@@ -86,6 +89,15 @@ public final class ConfigHelper {
               jsonArray.replace("\\", "\\\\"), new ConfigException("Not a valid JSON array", e));
         }
       }
+    }
+  }
+
+  public static Optional<FullDocumentBeforeChange> fullDocumentBeforeChangeFromString(
+      final String s) {
+    if (s.isEmpty()) {
+      return Optional.empty();
+    } else {
+      return Optional.of(FullDocumentBeforeChange.fromString(s));
     }
   }
 
@@ -157,9 +169,9 @@ public final class ConfigHelper {
     return stringConfig;
   }
 
-  public static <T> T getOverrideOrFallback(
-      final AbstractConfig config,
-      final BiFunction<AbstractConfig, String, T> getter,
+  public static <C extends AbstractConfig, T> T getOverrideOrFallback(
+      final C config,
+      final BiFunction<? super C, String, T> getter,
       final String overrideProperty,
       final String defaultProperty) {
     String propertyToRead =
@@ -178,5 +190,34 @@ public final class ConfigHelper {
       return configByName;
     }
     return Optional.empty();
+  }
+
+  public static Config evaluateConfigValues(
+      final Config rawConfig, final AbstractConfig resolvedConfig) {
+    final Map<String, ?> evalValues = resolvedConfig.values();
+    rawConfig
+        .configValues()
+        .forEach(
+            configValue -> {
+              Object ev = evalValues.get(configValue.name());
+              if (ev != null) {
+                configValue.value(ev);
+              }
+            });
+    return rawConfig;
+  }
+
+  public static Map<String, String> evaluateConfigValues(
+      final Map<String, String> rawConfigs, final AbstractConfig resolvedConfig) {
+    Map<String, String> resolvedRawConfigs = new HashMap<>(rawConfigs);
+    final Map<String, Object> originals = resolvedConfig.originals();
+    rawConfigs.forEach(
+        (key, val) -> {
+          Object ev = originals.get(key);
+          if (ev instanceof String) {
+            resolvedRawConfigs.put(key, (String) ev);
+          }
+        });
+    return resolvedRawConfigs;
   }
 }

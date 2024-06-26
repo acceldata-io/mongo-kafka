@@ -16,6 +16,7 @@
 package com.mongodb.kafka.connect.util;
 
 import static com.mongodb.kafka.connect.util.ServerApiConfig.setServerApi;
+import static com.mongodb.kafka.connect.util.SslConfigs.setupSsl;
 import static java.lang.String.format;
 import static java.util.Collections.emptyList;
 
@@ -26,8 +27,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.Config;
 import org.apache.kafka.common.config.ConfigValue;
+import org.apache.kafka.common.config.types.Password;
 import org.apache.kafka.connect.errors.ConnectException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +49,10 @@ import com.mongodb.event.ClusterDescriptionChangedEvent;
 import com.mongodb.event.ClusterListener;
 import com.mongodb.event.ClusterOpeningEvent;
 
+import com.mongodb.kafka.connect.sink.MongoSinkConfig;
+import com.mongodb.kafka.connect.source.MongoSourceConfig;
+import com.mongodb.kafka.connect.util.custom.credentials.CustomCredentialProvider;
+
 public final class ConnectionValidator {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ConnectionValidator.class);
@@ -59,7 +66,9 @@ public final class ConnectionValidator {
   private static final String INHERITED_PRIVILEGES = "inheritedPrivileges";
 
   public static Optional<MongoClient> validateCanConnect(
-      final Config config, final String connectionStringConfigName) {
+      final AbstractConfig connectorProperties,
+      final Config config,
+      final String connectionStringConfigName) {
     Optional<ConfigValue> optionalConnectionString =
         ConfigHelper.getConfigByName(config, connectionStringConfigName);
     if (optionalConnectionString.isPresent()
@@ -68,9 +77,22 @@ public final class ConnectionValidator {
 
       AtomicBoolean connected = new AtomicBoolean();
       CountDownLatch latch = new CountDownLatch(1);
-      ConnectionString connectionString = new ConnectionString((String) configValue.value());
+      ConnectionString connectionString =
+          new ConnectionString(((Password) configValue.value()).value());
       MongoClientSettings.Builder mongoClientSettingsBuilder =
           MongoClientSettings.builder().applyConnectionString(connectionString);
+      CustomCredentialProvider customCredentialProvider = null;
+      if (connectorProperties instanceof MongoSinkConfig) {
+        customCredentialProvider =
+            ((MongoSinkConfig) connectorProperties).getCustomCredentialProvider();
+      } else if (connectorProperties instanceof MongoSourceConfig) {
+        customCredentialProvider =
+            ((MongoSourceConfig) connectorProperties).getCustomCredentialProvider();
+      }
+      if (customCredentialProvider != null) {
+        mongoClientSettingsBuilder.credential(
+            customCredentialProvider.getCustomCredential(connectorProperties.originals()));
+      }
       setServerApi(mongoClientSettingsBuilder, config);
 
       MongoClientSettings mongoClientSettings =
@@ -99,6 +121,7 @@ public final class ConnectionValidator {
                               }
                             }
                           }))
+              .applyToSslSettings(sslBuilder -> setupSsl(sslBuilder, connectorProperties))
               .build();
 
       long latchTimeout =
@@ -125,8 +148,7 @@ public final class ConnectionValidator {
   /**
    * Validates that the user has the required action permissions
    *
-   * <p>Uses the connection status privileges information to check the required action permissions</p>
-   *
+   * <p>Uses the connection status privileges information to check the required action permissions
    * See: https://docs.mongodb.com/manual/reference/command/connectionStatus
    */
   public static void validateUserHasActions(
@@ -185,9 +207,7 @@ public final class ConnectionValidator {
     }
   }
 
-  /**
-   * Checks the users privileges list and removes any that are supported
-   */
+  /** Checks the users privileges list and removes any that are supported */
   private static List<String> removeUserActions(
       final List<Document> privileges,
       final String authSource,
@@ -233,15 +253,15 @@ public final class ConnectionValidator {
   /**
    * Checks the roles info document for matching actions and removes them from the provided list
    *
-   * See: https://docs.mongodb.com/manual/reference/command/rolesInfo
+   * <p>See: https://docs.mongodb.com/manual/reference/command/rolesInfo
    */
   private static List<String> removeRoleActions(
-          final MongoClient mongoClient,
-          final MongoCredential credential,
-          final String databaseName,
-          final String collectionName,
-          final Document authInfo,
-          final List<String> actions) {
+      final MongoClient mongoClient,
+      final MongoCredential credential,
+      final String databaseName,
+      final String collectionName,
+      final Document authInfo,
+      final List<String> actions) {
 
     if (actions.isEmpty()) {
       return actions;
@@ -250,17 +270,17 @@ public final class ConnectionValidator {
     List<String> unsupportedActions = new ArrayList<>(actions);
     for (final Document userRole : authInfo.getList(AUTH_USER_ROLES, Document.class, emptyList())) {
       Document rolesInfo =
-              mongoClient
-                      .getDatabase(userRole.getString("db"))
-                      .runCommand(Document.parse(format(ROLES_INFO, userRole.getString("role"))));
+          mongoClient
+              .getDatabase(userRole.getString("db"))
+              .runCommand(Document.parse(format(ROLES_INFO, userRole.getString("role"))));
       for (final Document roleInfo : rolesInfo.getList("roles", Document.class, emptyList())) {
         unsupportedActions =
-                removeUserActions(
-                        roleInfo.getList(INHERITED_PRIVILEGES, Document.class, emptyList()),
-                        credential.getSource(),
-                        databaseName,
-                        collectionName,
-                        unsupportedActions);
+            removeUserActions(
+                roleInfo.getList(INHERITED_PRIVILEGES, Document.class, emptyList()),
+                credential.getSource(),
+                databaseName,
+                collectionName,
+                unsupportedActions);
         if (unsupportedActions.isEmpty()) {
           return unsupportedActions;
         }

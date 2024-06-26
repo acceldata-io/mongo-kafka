@@ -22,26 +22,26 @@ import static com.mongodb.kafka.connect.source.MongoSourceConfig.CONNECTION_URI_
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.DATABASE_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.FULL_DOCUMENT_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.PIPELINE_CONFIG;
-import static com.mongodb.kafka.connect.source.SourceTestHelper.TEST_COLLECTION;
-import static com.mongodb.kafka.connect.source.SourceTestHelper.TEST_DATABASE;
+import static com.mongodb.kafka.connect.util.jmx.internal.MBeanServerUtils.getMBeanAttributes;
 import static java.lang.String.format;
 import static java.util.Collections.singletonMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.kafka.clients.producer.RecordMetadata;
 import org.apache.kafka.connect.source.SourceTaskContext;
 import org.apache.kafka.connect.storage.OffsetStorageReader;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -52,6 +52,7 @@ import org.bson.RawBsonDocument;
 import com.mongodb.client.ChangeStreamIterable;
 import com.mongodb.client.MongoChangeStreamCursor;
 import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.MongoIterable;
@@ -61,10 +62,18 @@ import com.mongodb.client.model.CollationCaseFirst;
 import com.mongodb.client.model.CollationMaxVariable;
 import com.mongodb.client.model.CollationStrength;
 import com.mongodb.client.model.changestream.FullDocument;
+import com.mongodb.event.CommandFailedEvent;
+import com.mongodb.event.CommandSucceededEvent;
 
+import com.mongodb.kafka.connect.util.jmx.SourceTaskStatistics;
+
+/**
+ * This class contains tests that are supposed to be unit tests, but because of how these tests were
+ * written originally, they became integration tests as a result of refactoring {@link
+ * MongoSourceConfig}, and need to be completely rewritten to remain unit tests.
+ */
 @ExtendWith(MockitoExtension.class)
-@RunWith(JUnitPlatform.class)
-class MongoSourceTaskTest {
+class MongoSourceTaskIntegrationTest2 {
 
   @Mock private MongoClient mongoClient;
   @Mock private MongoDatabase mongoDatabase;
@@ -75,6 +84,8 @@ class MongoSourceTaskTest {
   @Mock private SourceTaskContext context;
   @Mock private OffsetStorageReader offsetStorageReader;
 
+  private static final String TEST_DATABASE = "myDB";
+  private static final String TEST_COLLECTION = "myColl";
   private static final BsonDocument RESUME_TOKEN = BsonDocument.parse("{resume: 'token'}");
   private static final Map<String, Object> OFFSET = singletonMap("_id", RESUME_TOKEN.toJson());
 
@@ -87,6 +98,7 @@ class MongoSourceTaskTest {
     cfgMap.put(DATABASE_CONFIG, TEST_DATABASE);
     cfgMap.put(COLLECTION_CONFIG, TEST_COLLECTION);
     MongoSourceConfig cfg = new MongoSourceConfig(cfgMap);
+    task.start(cfgMap);
 
     when(mongoClient.getDatabase(TEST_DATABASE)).thenReturn(mongoDatabase);
     when(mongoDatabase.getCollection(TEST_COLLECTION)).thenReturn(mongoCollection);
@@ -94,7 +106,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).getCollection(TEST_COLLECTION);
@@ -113,7 +125,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).getCollection(TEST_COLLECTION);
@@ -145,7 +157,7 @@ class MongoSourceTaskTest {
 
     task.initialize(context);
     when(context.offsetStorageReader()).thenReturn(offsetStorageReader);
-    when(offsetStorageReader.offset(task.createPartitionMap(cfg))).thenReturn(OFFSET);
+    when(offsetStorageReader.offset(MongoSourceTask.createPartitionMap(cfg))).thenReturn(OFFSET);
 
     when(mongoClient.getDatabase(TEST_DATABASE)).thenReturn(mongoDatabase);
     when(mongoDatabase.getCollection(TEST_COLLECTION)).thenReturn(mongoCollection);
@@ -157,7 +169,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).getCollection(TEST_COLLECTION);
@@ -168,6 +180,8 @@ class MongoSourceTaskTest {
     verify(changeStreamIterable, times(1)).startAfter(RESUME_TOKEN);
     verify(changeStreamIterable, times(1)).withDocumentClass(RawBsonDocument.class);
     verify(mongoIterable, times(1)).cursor();
+
+    task.stop();
   }
 
   @Test
@@ -178,13 +192,14 @@ class MongoSourceTaskTest {
     cfgMap.put(CONNECTION_URI_CONFIG, "mongodb://localhost");
     cfgMap.put(DATABASE_CONFIG, TEST_DATABASE);
     MongoSourceConfig cfg = new MongoSourceConfig(cfgMap);
+    task.start(cfgMap);
 
     when(mongoClient.getDatabase(TEST_DATABASE)).thenReturn(mongoDatabase);
     when(mongoDatabase.watch()).thenReturn(changeStreamIterable);
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).watch();
@@ -201,7 +216,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).watch(cfg.getPipeline().get());
@@ -232,7 +247,7 @@ class MongoSourceTaskTest {
 
     task.initialize(context);
     when(context.offsetStorageReader()).thenReturn(offsetStorageReader);
-    when(offsetStorageReader.offset(task.createPartitionMap(cfg))).thenReturn(OFFSET);
+    when(offsetStorageReader.offset(MongoSourceTask.createPartitionMap(cfg))).thenReturn(OFFSET);
 
     when(mongoClient.getDatabase(TEST_DATABASE)).thenReturn(mongoDatabase);
     when(mongoDatabase.watch(cfg.getPipeline().get())).thenReturn(changeStreamIterable);
@@ -243,7 +258,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).getDatabase(TEST_DATABASE);
     verify(mongoDatabase, times(1)).watch(cfg.getPipeline().get());
@@ -253,6 +268,8 @@ class MongoSourceTaskTest {
     verify(changeStreamIterable, times(1)).startAfter(RESUME_TOKEN);
     verify(changeStreamIterable, times(1)).withDocumentClass(RawBsonDocument.class);
     verify(mongoIterable, times(1)).cursor();
+
+    task.stop();
   }
 
   @Test
@@ -262,12 +279,13 @@ class MongoSourceTaskTest {
     Map<String, String> cfgMap = new HashMap<>();
     cfgMap.put(CONNECTION_URI_CONFIG, "mongodb://localhost");
     MongoSourceConfig cfg = new MongoSourceConfig(cfgMap);
+    task.start(cfgMap);
 
     when(mongoClient.watch()).thenReturn(changeStreamIterable);
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).watch();
     verify(changeStreamIterable, times(1)).withDocumentClass(RawBsonDocument.class);
@@ -282,7 +300,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).watch(cfg.getPipeline().get());
     verify(changeStreamIterable, times(1)).withDocumentClass(RawBsonDocument.class);
@@ -311,7 +329,7 @@ class MongoSourceTaskTest {
 
     task.initialize(context);
     when(context.offsetStorageReader()).thenReturn(offsetStorageReader);
-    when(offsetStorageReader.offset(task.createPartitionMap(cfg))).thenReturn(OFFSET);
+    when(offsetStorageReader.offset(MongoSourceTask.createPartitionMap(cfg))).thenReturn(OFFSET);
 
     when(mongoClient.watch(cfg.getPipeline().get())).thenReturn(changeStreamIterable);
     when(changeStreamIterable.batchSize(101)).thenReturn(changeStreamIterable);
@@ -321,7 +339,7 @@ class MongoSourceTaskTest {
     when(changeStreamIterable.withDocumentClass(RawBsonDocument.class)).thenReturn(mongoIterable);
     when(mongoIterable.cursor()).thenReturn(mongoCursor);
 
-    task.createCursor(cfg, mongoClient);
+    task.startedTask().createCursor(cfg, mongoClient);
 
     verify(mongoClient, times(1)).watch(cfg.getPipeline().get());
     verify(changeStreamIterable, times(1)).batchSize(101);
@@ -330,30 +348,13 @@ class MongoSourceTaskTest {
     verify(changeStreamIterable, times(1)).startAfter(RESUME_TOKEN);
     verify(changeStreamIterable, times(1)).withDocumentClass(RawBsonDocument.class);
     verify(mongoIterable, times(1)).cursor();
-  }
 
-  @Test
-  @DisplayName("test handles legacy offsets")
-  void testHandlesLegacyOffsets() {
-    MongoSourceTask task = new MongoSourceTask();
-    Map<String, String> cfgMap = new HashMap<>();
-    cfgMap.put(CONNECTION_URI_CONFIG, "mongodb://localhost");
-    cfgMap.put(DATABASE_CONFIG, TEST_DATABASE);
-    cfgMap.put(COLLECTION_CONFIG, TEST_COLLECTION);
-    MongoSourceConfig cfg = new MongoSourceConfig(cfgMap);
-
-    task.initialize(context);
-    when(context.offsetStorageReader()).thenReturn(offsetStorageReader);
-    when(offsetStorageReader.offset(task.createPartitionMap(cfg))).thenReturn(null);
-    when(offsetStorageReader.offset(task.createLegacyPartitionMap(cfg))).thenReturn(OFFSET);
-
-    assertEquals(OFFSET, task.getOffset(cfg));
+    task.stop();
   }
 
   @Test
   @DisplayName("test creates the expected partition map")
   void testCreatesTheExpectedPartitionMap() {
-    MongoSourceTask task = new MongoSourceTask();
     Map<String, String> cfgMap = new HashMap<>();
     cfgMap.put(CONNECTION_URI_CONFIG, "mongodb+srv://user:password@localhost/");
     cfgMap.put(DATABASE_CONFIG, TEST_DATABASE);
@@ -362,31 +363,119 @@ class MongoSourceTaskTest {
 
     assertEquals(
         format("mongodb+srv://localhost/%s.%s", TEST_DATABASE, TEST_COLLECTION),
-        task.createDefaultPartitionName(cfg));
-    assertEquals(
-        format("mongodb+srv://user:password@localhost//%s.%s", TEST_DATABASE, TEST_COLLECTION),
-        task.createLegacyPartitionName(cfg));
+        MongoSourceTask.createDefaultPartitionName(cfg));
 
     cfgMap.put(CONNECTION_URI_CONFIG, "mongodb://localhost/");
     cfg = new MongoSourceConfig(cfgMap);
     assertEquals(
         format("mongodb://localhost/%s.%s", TEST_DATABASE, TEST_COLLECTION),
-        task.createDefaultPartitionName(cfg));
-    assertEquals(
-        format("mongodb://localhost//%s.%s", TEST_DATABASE, TEST_COLLECTION),
-        task.createLegacyPartitionName(cfg));
+        MongoSourceTask.createDefaultPartitionName(cfg));
 
     cfgMap.remove(COLLECTION_CONFIG);
     cfg = new MongoSourceConfig(cfgMap);
     assertEquals(
-        format("mongodb://localhost/%s", TEST_DATABASE), task.createDefaultPartitionName(cfg));
-    assertEquals(
-        format("mongodb://localhost//%s.", TEST_DATABASE), task.createLegacyPartitionName(cfg));
+        format("mongodb://localhost/%s", TEST_DATABASE),
+        MongoSourceTask.createDefaultPartitionName(cfg));
 
     cfgMap.remove(DATABASE_CONFIG);
     cfg = new MongoSourceConfig(cfgMap);
-    assertEquals("mongodb://localhost/", task.createDefaultPartitionName(cfg));
-    assertEquals("mongodb://localhost//.", task.createLegacyPartitionName(cfg));
+    assertEquals("mongodb://localhost/", MongoSourceTask.createDefaultPartitionName(cfg));
+  }
+
+  @Test
+  @DisplayName("commitRecord should track jmx stats")
+  void testCommitRecord() {
+    assumeTrue(isReplicaSetOrSharded());
+    String mBeanName =
+        "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-change-stream-unknown";
+    MongoSourceTask task = new MongoSourceTask();
+    task.start(Collections.emptyMap());
+
+    task.commitRecord(null, new RecordMetadata(null, 0, 0, 0, 0L, 0, 0));
+
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(0, attrs.get("records-filtered"));
+      assertEquals(1, attrs.get("records-acknowledged"));
+    }
+
+    task.commitRecord(null, null);
+
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(1, attrs.get("records-filtered"));
+      assertEquals(1, attrs.get("records-acknowledged"));
+    }
+
+    task.stop();
+  }
+
+  @Test
+  @DisplayName("CommandListener methods should track jmx stats")
+  void testMongoCommand() {
+    String mBeanName =
+        "com.mongodb.kafka.connect:type=source-task-metrics,connector=MongoSourceConnector,task=source-task-change-stream-unknown";
+
+    SourceTaskStatistics stats = new SourceTaskStatistics(mBeanName);
+    stats.register();
+    MongoSourceTask.mongoCommandSucceeded(
+        new CommandSucceededEvent(0, null, "getMore", new BsonDocument(), 100000000), stats);
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(1, attrs.get("getmore-commands-successful"));
+      assertEquals(100, attrs.get("getmore-commands-successful-duration-ms"));
+      assertEquals(1, attrs.get("getmore-commands-successful-duration-over-1-ms"));
+      assertEquals(1, attrs.get("getmore-commands-successful-duration-over-10-ms"));
+      assertEquals(4, attrs.values().stream().filter(v -> v != 0).count());
+    }
+    stats.unregister();
+
+    stats = new SourceTaskStatistics(mBeanName);
+    stats.register();
+    MongoSourceTask.mongoCommandSucceeded(
+        new CommandSucceededEvent(0, null, "aggregate", new BsonDocument(), 100000000), stats);
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(1, attrs.get("initial-commands-successful"));
+      assertEquals(100, attrs.get("initial-commands-successful-duration-ms"));
+      assertEquals(1, attrs.get("initial-commands-successful-duration-over-1-ms"));
+      assertEquals(1, attrs.get("initial-commands-successful-duration-over-10-ms"));
+      assertEquals(4, attrs.values().stream().filter(v -> v != 0).count());
+    }
+    stats.unregister();
+
+    stats = new SourceTaskStatistics(mBeanName);
+    stats.register();
+    MongoSourceTask.mongoCommandFailed(
+        new CommandFailedEvent(0, null, "getMore", 100000000, null), stats);
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(1, attrs.get("getmore-commands-failed"));
+      assertEquals(100, attrs.get("getmore-commands-failed-duration-ms"));
+      assertEquals(1, attrs.get("getmore-commands-failed-duration-over-1-ms"));
+      assertEquals(1, attrs.get("getmore-commands-failed-duration-over-10-ms"));
+      assertEquals(4, attrs.values().stream().filter(v -> v != 0).count());
+    }
+    stats.unregister();
+
+    stats = new SourceTaskStatistics(mBeanName);
+    stats.register();
+    MongoSourceTask.mongoCommandFailed(
+        new CommandFailedEvent(0, null, "aggregate", 100000000, null), stats);
+    for (Map<String, Long> attrs : getMBeanAttributes(mBeanName).values()) {
+      assertEquals(1, attrs.get("initial-commands-failed"));
+      assertEquals(100, attrs.get("initial-commands-failed-duration-ms"));
+      assertEquals(1, attrs.get("initial-commands-failed-duration-over-1-ms"));
+      assertEquals(1, attrs.get("initial-commands-failed-duration-over-10-ms"));
+      assertEquals(4, attrs.values().stream().filter(v -> v != 0).count());
+    }
+    stats.unregister();
+  }
+
+  private boolean isReplicaSetOrSharded() {
+    String defaultString = "mongodb://localhost:27017";
+    String connectionString = System.getProperty("org.mongodb.test.uri", defaultString);
+    connectionString = connectionString.isEmpty() ? defaultString : connectionString;
+    try (MongoClient mongoClient = MongoClients.create(connectionString)) {
+      Document isMaster =
+          mongoClient.getDatabase("admin").runCommand(BsonDocument.parse("{isMaster: 1}"));
+      return isMaster.containsKey("setName") || isMaster.get("msg", "").equals("isdbgrid");
+    }
   }
 
   private void resetMocks() {

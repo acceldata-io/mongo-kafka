@@ -19,9 +19,9 @@ import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.kafka.connect.sink.MongoSinkConfig.TOPIC_OVERRIDE_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.CHANGE_DATA_CAPTURE_HANDLER_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.COLLECTION_CONFIG;
-import static com.mongodb.kafka.connect.source.MongoSourceConfig.COPY_EXISTING_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.DATABASE_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.FULL_DOCUMENT_CONFIG;
+import static com.mongodb.kafka.connect.source.MongoSourceConfig.STARTUP_MODE_CONFIG;
 import static com.mongodb.kafka.connect.source.MongoSourceConfig.TOPIC_PREFIX_CONFIG;
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
@@ -52,6 +52,7 @@ import com.mongodb.client.model.Updates;
 import com.mongodb.kafka.connect.mongodb.MongoKafkaTestCase;
 import com.mongodb.kafka.connect.sink.MongoSinkTopicConfig;
 import com.mongodb.kafka.connect.sink.cdc.mongodb.ChangeStreamHandler;
+import com.mongodb.kafka.connect.source.MongoSourceConfig.StartupConfig.StartupMode;
 
 public class ChangeStreamRoundTripTest extends MongoKafkaTestCase {
 
@@ -88,15 +89,15 @@ public class ChangeStreamRoundTripTest extends MongoKafkaTestCase {
     assertDatabase(original, replicated);
 
     // Test can handle multiple collections, with inserts and updates
-    insertMany(rangeClosed(100, 110), coll1);
     coll1.updateMany(new Document(), Updates.set("test", 1));
+    insertMany(rangeClosed(100, 110), coll1);
     assertDatabase(original, replicated);
 
     // Test can handle replace and update operations
-    insertMany(rangeClosed(120, 130), coll1);
     coll1.replaceOne(eq("_id", 1), new Document());
     coll1.replaceOne(eq("_id", 3), new Document());
     coll1.replaceOne(eq("_id", 5), new Document());
+    insertMany(rangeClosed(120, 130), coll1);
 
     assertDatabase(original, replicated);
 
@@ -132,18 +133,18 @@ public class ChangeStreamRoundTripTest extends MongoKafkaTestCase {
     assertDatabase(original, replicated);
 
     // Test can handle replace and update operations
-    insertMany(rangeClosed(120, 130), coll1, coll2);
     coll1.replaceOne(eq("_id", 1), new Document());
     coll1.replaceOne(eq("_id", 3), new Document());
     coll1.replaceOne(eq("_id", 5), new Document());
     coll2.updateMany(new Document(), Updates.set("newField", 1));
+    insertMany(rangeClosed(120, 130), coll1, coll2);
 
     assertDatabase(original, replicated);
 
     // Test handles delete operations
-    insertMany(rangeClosed(140, 150), coll1, coll2);
     coll1.deleteMany(Filters.mod("_id", 2, 0));
     coll2.deleteMany(Filters.mod("_id", 3, 0));
+    insertMany(rangeClosed(140, 150), coll1, coll2);
 
     assertDatabase(original, replicated);
   }
@@ -282,7 +283,7 @@ public class ChangeStreamRoundTripTest extends MongoKafkaTestCase {
     Properties sourceProperties = new Properties();
     sourceProperties.put(DATABASE_CONFIG, database.getName());
     sourceProperties.put(TOPIC_PREFIX_CONFIG, "copy");
-    sourceProperties.put(COPY_EXISTING_CONFIG, "true");
+    sourceProperties.put(STARTUP_MODE_CONFIG, StartupMode.COPY_EXISTING.propertyValue());
     return sourceProperties;
   }
 

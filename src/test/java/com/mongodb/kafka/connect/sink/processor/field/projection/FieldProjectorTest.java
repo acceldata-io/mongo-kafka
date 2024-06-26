@@ -41,8 +41,6 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 
 import org.bson.BsonDocument;
 
@@ -57,7 +55,6 @@ import com.mongodb.kafka.connect.sink.processor.BlockListValueProjector;
 import com.mongodb.kafka.connect.sink.processor.WhitelistKeyProjector;
 import com.mongodb.kafka.connect.sink.processor.WhitelistValueProjector;
 
-@RunWith(JUnitPlatform.class)
 class FieldProjectorTest {
 
   // flat doc field maps
@@ -92,6 +89,9 @@ class FieldProjectorTest {
         BsonDocument.parse(
             "{myBoolean: true, myInt: 42, "
                 + "myBytes: {$binary: 'QUJD', $type: '00'}, myArray: []}");
+    BsonDocument keyDocument6 = BsonDocument.parse("{_id: 'ABC-123', myInt: 42, myArray: []}");
+    BsonDocument keyDocument7 =
+        BsonDocument.parse("{myBoolean: true, myBytes: {$binary: 'QUJD', $type: '00'}}");
 
     flatKeyFieldsMapBlockList =
         new HashMap<String, BsonDocument>() {
@@ -99,6 +99,7 @@ class FieldProjectorTest {
             put("", keyDocument1);
             put("*", keyDocument2);
             put("**", keyDocument2);
+            put("myB*", keyDocument6);
             put("_id", keyDocument5);
             put("myBoolean, myInt", keyDocument3);
             put("missing1, unknown2", keyDocument1);
@@ -111,6 +112,7 @@ class FieldProjectorTest {
             put("", keyDocument2);
             put("*", keyDocument1);
             put("**", keyDocument1);
+            put("myB*", keyDocument7);
             put("missing1, unknown2", keyDocument2);
             put("myBoolean, myBytes, myArray", keyDocument4);
           }
@@ -134,6 +136,7 @@ class FieldProjectorTest {
         BsonDocument.parse(
             "{ myLong: {$numberLong: '42'}, myDouble: 23.23, myString: 'BSON', "
                 + "myBytes: {$binary: 'eHl6', $type: '00'}, myArray: []}");
+    BsonDocument valueDocument6 = BsonDocument.parse("{_id: 'XYZ-789'}");
 
     flatValueFieldsMapBlockList =
         new HashMap<String, BsonDocument>() {
@@ -141,6 +144,7 @@ class FieldProjectorTest {
             put("", valueDocument1);
             put("*", valueDocument2);
             put("**", valueDocument2);
+            put("my*", valueDocument6);
             put("_id", valueDocument5);
             put("myLong, myDouble", valueDocument3);
             put("missing1,unknown2", valueDocument1);
@@ -153,6 +157,8 @@ class FieldProjectorTest {
             put("", valueDocument2);
             put("*", valueDocument1);
             put("**", valueDocument1);
+            put("my*", valueDocument5);
+            put("_id", valueDocument6);
             put("missing1,unknown2", valueDocument2);
             put("myDouble, myBytes,myArray", valueDocument4);
           }
@@ -367,7 +373,7 @@ class FieldProjectorTest {
                   entry.getKey()));
       tests.add(
           buildDynamicTestFor(
-              entry, buildSinkDocumentNestedStruct(), new WhitelistKeyProjector(cfg)));
+              entry, buildSinkDocumentNestedStruct(), new AllowListKeyProjector(cfg)));
     }
 
     for (Map.Entry<String, BsonDocument> entry : nestedValueFieldsMapBlockList.entrySet()) {
@@ -381,7 +387,7 @@ class FieldProjectorTest {
                   entry.getKey()));
       tests.add(
           buildDynamicTestFor(
-              entry, buildSinkDocumentNestedStruct(), new BlacklistValueProjector(cfg)));
+              entry, buildSinkDocumentNestedStruct(), new BlockListValueProjector(cfg)));
     }
 
     for (Map.Entry<String, BsonDocument> entry : nestedValueFieldsMapAllowList.entrySet()) {
@@ -395,7 +401,7 @@ class FieldProjectorTest {
                   entry.getKey()));
       tests.add(
           buildDynamicTestFor(
-              entry, buildSinkDocumentNestedStruct(), new WhitelistValueProjector(cfg)));
+              entry, buildSinkDocumentNestedStruct(), new AllowListValueProjector(cfg)));
     }
 
     return tests;

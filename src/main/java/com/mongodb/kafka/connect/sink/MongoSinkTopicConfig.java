@@ -79,6 +79,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
 
   public enum ErrorTolerance {
     NONE,
+    DATA,
     ALL;
 
     public String value() {
@@ -88,7 +89,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
 
   private static final String EMPTY_STRING = "";
   private static final String TOPIC_CONFIG = "topic";
-  static final String TOPIC_OVERRIDE_PREFIX = "topic.override.";
+  public static final String TOPIC_OVERRIDE_PREFIX = "topic.override.";
 
   // Namespace
   public static final String DATABASE_CONFIG = "database";
@@ -159,36 +160,37 @@ public class MongoSinkTopicConfig extends AbstractConfig {
   private static final boolean FIELD_NAMESPACE_MAPPER_ERROR_IF_INVALID_DEFAULT = false;
 
   // Writes
-  public static final String MAX_NUM_RETRIES_CONFIG = "max.num.retries";
-  private static final String MAX_NUM_RETRIES_DISPLAY = "Max number of retries";
-  private static final String MAX_NUM_RETRIES_DOC =
-      "How often a retry should be done on write errors";
-  private static final int MAX_NUM_RETRIES_DEFAULT = 1;
-
-  public static final String RETRIES_DEFER_TIMEOUT_CONFIG = "retries.defer.timeout";
-  private static final String RETRIES_DEFER_TIMEOUT_DISPLAY = "Retry defer timeout";
-  private static final String RETRIES_DEFER_TIMEOUT_DOC =
-      "How long in ms a retry should get deferred";
-  private static final int RETRIES_DEFER_TIMEOUT_DEFAULT = 5000;
-
   public static final String DELETE_ON_NULL_VALUES_CONFIG = "delete.on.null.values";
   private static final String DELETE_ON_NULL_VALUES_DISPLAY = "Delete on null values";
   private static final String DELETE_ON_NULL_VALUES_DOC =
       "Whether or not the connector tries to delete documents based on key when " + "value is null";
-  private static final boolean DELETE_ON_NULL_VALUES_DEFAULT = false;
+  static final boolean DELETE_ON_NULL_VALUES_DEFAULT = false;
 
   public static final String WRITEMODEL_STRATEGY_CONFIG = "writemodel.strategy";
   private static final String WRITEMODEL_STRATEGY_DISPLAY = "The writeModel strategy";
   private static final String WRITEMODEL_STRATEGY_DOC =
       "The class the handles how build the write models for the sink documents";
-  private static final String WRITEMODEL_STRATEGY_DEFAULT =
+  static final String WRITEMODEL_STRATEGY_DEFAULT =
       "com.mongodb.kafka.connect.sink.writemodel.strategy.DefaultWriteModelStrategy";
+
+  public static final String DELETE_WRITEMODEL_STRATEGY_CONFIG = "delete.writemodel.strategy";
+  private static final String DELETE_WRITEMODEL_STRATEGY_DISPLAY = "The delete writeModel strategy";
+  private static final String DELETE_WRITEMODEL_STRATEGY_DOC =
+      "The class the handles how to build the delete write models for the sink documents.";
+  static final String DELETE_WRITEMODEL_STRATEGY_DEFAULT =
+      "com.mongodb.kafka.connect.sink.writemodel.strategy.DeleteOneDefaultStrategy";
 
   public static final String MAX_BATCH_SIZE_CONFIG = "max.batch.size";
   private static final String MAX_BATCH_SIZE_DISPLAY = "The maximum batch size";
   private static final String MAX_BATCH_SIZE_DOC =
       "The maximum number of sink records to possibly batch together for processing";
   private static final int MAX_BATCH_SIZE_DEFAULT = 0;
+
+  public static final String BULK_WRITE_ORDERED_CONFIG = "bulk.write.ordered";
+  private static final String BULK_WRITE_ORDERED_DISPLAY = "Use ordered bulk writes";
+  private static final String BULK_WRITE_ORDERED_DOC =
+      "Whether the batches controlled by 'max.batch.size' must be written via ordered bulk writes";
+  static final boolean BULK_WRITE_ORDERED_DEFAULT = true;
 
   public static final String RATE_LIMITING_TIMEOUT_CONFIG = "rate.limiting.timeout";
   private static final String RATE_LIMITING_TIMEOUT_DISPLAY = "The rate limiting timeout";
@@ -216,32 +218,32 @@ public class MongoSinkTopicConfig extends AbstractConfig {
   private static final String KEY_PROJECTION_TYPE_DISPLAY = "The key projection type";
   private static final String KEY_PROJECTION_TYPE_DOC =
       "The type of key projection to use " + "Use either `AllowList` or `BlockList`.";
-  private static final String KEY_PROJECTION_TYPE_DEFAULT = "none";
+  static final String KEY_PROJECTION_TYPE_DEFAULT = "none";
 
   public static final String KEY_PROJECTION_LIST_CONFIG = "key.projection.list";
   private static final String KEY_PROJECTION_LIST_DISPLAY = "The key projection list";
   private static final String KEY_PROJECTION_LIST_DOC =
       "A comma separated list of field names for key projection";
-  private static final String KEY_PROJECTION_LIST_DEFAULT = EMPTY_STRING;
+  static final String KEY_PROJECTION_LIST_DEFAULT = EMPTY_STRING;
 
   public static final String VALUE_PROJECTION_TYPE_CONFIG = "value.projection.type";
   private static final String VALUE_PROJECTION_TYPE_DISPLAY =
       "The type of value projection to use " + "Use either `AllowList` or `BlockList`.";
   private static final String VALUE_PROJECTION_TYPE_DOC = "The type of value projection to use";
-  private static final String VALUE_PROJECTION_TYPE_DEFAULT = "none";
+  static final String VALUE_PROJECTION_TYPE_DEFAULT = "none";
 
   public static final String VALUE_PROJECTION_LIST_CONFIG = "value.projection.list";
   private static final String VALUE_PROJECTION_LIST_DISPLAY = "The value projection list";
   private static final String VALUE_PROJECTION_LIST_DOC =
       "A comma separated list of field names for value projection";
-  private static final String VALUE_PROJECTION_LIST_DEFAULT = EMPTY_STRING;
+  static final String VALUE_PROJECTION_LIST_DEFAULT = EMPTY_STRING;
 
   public static final String FIELD_RENAMER_MAPPING_CONFIG = "field.renamer.mapping";
   private static final String FIELD_RENAMER_MAPPING_DISPLAY = "The field renamer mapping";
   private static final String FIELD_RENAMER_MAPPING_DOC =
       "An inline JSON array with objects describing field name mappings.\n"
           + "Example: `[{\"oldName\":\"key.fieldA\",\"newName\":\"field1\"},{\"oldName\":\"value.xyz\",\"newName\":\"abc\"}]`";
-  private static final String FIELD_RENAMER_MAPPING_DEFAULT = "[]";
+  static final String FIELD_RENAMER_MAPPING_DEFAULT = "[]";
 
   public static final String FIELD_RENAMER_REGEXP_CONFIG = "field.renamer.regexp";
   public static final String FIELD_RENAMER_REGEXP_DISPLAY = "The field renamer regex";
@@ -249,14 +251,14 @@ public class MongoSinkTopicConfig extends AbstractConfig {
       "An inline JSON array with objects describing regexp settings.\n"
           + "Example: `[{\"regexp\":\"^key\\\\\\\\..*my.*$\",\"pattern\":\"my\",\"replace\":\"\"},"
           + "{\"regexp\":\"^value\\\\\\\\..*$\",\"pattern\":\"\\\\\\\\.\",\"replace\":\"_\"}]`";
-  private static final String FIELD_RENAMER_REGEXP_DEFAULT = "[]";
+  static final String FIELD_RENAMER_REGEXP_DEFAULT = "[]";
 
   // Id strategies
   public static final String DOCUMENT_ID_STRATEGY_CONFIG = "document.id.strategy";
   private static final String DOCUMENT_ID_STRATEGY_DISPLAY = "The document id strategy";
   private static final String DOCUMENT_ID_STRATEGY_DOC =
       "The IdStrategy class name to use for generating a unique document id (_id)";
-  private static final String DOCUMENT_ID_STRATEGY_DEFAULT =
+  static final String DOCUMENT_ID_STRATEGY_DEFAULT =
       "com.mongodb.kafka.connect.sink.processor.id.strategy.BsonOidStrategy";
 
   public static final String DOCUMENT_ID_STRATEGY_OVERWRITE_EXISTING_CONFIG =
@@ -265,7 +267,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
       "The document id strategy overwrite existing setting";
   private static final String DOCUMENT_ID_STRATEGY_OVERWRITE_EXISTING_DOC =
       "Allows the document id strategy will overwrite existing `_id` values";
-  private static final boolean DOCUMENT_ID_STRATEGY_OVERWRITE_EXISTING_DEFAULT = false;
+  static final boolean DOCUMENT_ID_STRATEGY_OVERWRITE_EXISTING_DEFAULT = false;
 
   public static final String DOCUMENT_ID_STRATEGY_UUID_FORMAT_CONFIG =
       "document.id.strategy.uuid.format";
@@ -322,7 +324,8 @@ public class MongoSinkTopicConfig extends AbstractConfig {
   public static final String ERRORS_TOLERANCE_DOC =
       "Behavior for tolerating errors during connector operation. 'none' is the default value "
           + "and signals that any error will result in an immediate connector task failure; 'all' "
-          + "changes the behavior to skip over problematic records.";
+          + "changes the behavior to skip over problematic records,"
+          + "'data' will try for network/server unreachable errors.";
 
   public static final String OVERRIDE_ERRORS_TOLERANCE_CONFIG = "mongo.errors.tolerance";
   public static final String OVERRIDE_ERRORS_TOLERANCE_DOC =
@@ -344,7 +347,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
   private static final String CHANGE_DATA_CAPTURE_HANDLER_DISPLAY = "The CDC handler";
   private static final String CHANGE_DATA_CAPTURE_HANDLER_DOC =
       "The class name of the CDC handler to use for processing";
-  private static final String CHANGE_DATA_CAPTURE_HANDLER_DEFAULT = EMPTY_STRING;
+  static final String CHANGE_DATA_CAPTURE_HANDLER_DEFAULT = EMPTY_STRING;
 
   // Timeseries
   public static final String TIMESERIES_TIMEFIELD_CONFIG = "timeseries.timefield";
@@ -421,7 +424,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
           MongoSinkTopicConfig::getIdStrategy,
           MongoSinkTopicConfig::getPostProcessors,
           MongoSinkTopicConfig::getWriteModelStrategy,
-          MongoSinkTopicConfig::getDeleteOneWriteModelStrategy,
+          MongoSinkTopicConfig::getDeleteWriteModelStrategy,
           MongoSinkTopicConfig::getRateLimitSettings,
           MongoSinkTopicConfig::getCdcHandler);
 
@@ -463,8 +466,8 @@ public class MongoSinkTopicConfig extends AbstractConfig {
     return topic;
   }
 
-  public boolean logErrors() {
-    return !tolerateErrors()
+  boolean logErrors() {
+    return !(tolerateErrors() || tolerateDataErrors())
         || ConfigHelper.getOverrideOrFallback(
             this,
             AbstractConfig::getBoolean,
@@ -472,7 +475,7 @@ public class MongoSinkTopicConfig extends AbstractConfig {
             ERRORS_LOG_ENABLE_CONFIG);
   }
 
-  public boolean tolerateErrors() {
+  boolean tolerateErrors() {
     String errorsTolerance =
         ConfigHelper.getOverrideOrFallback(
             this,
@@ -480,6 +483,16 @@ public class MongoSinkTopicConfig extends AbstractConfig {
             OVERRIDE_ERRORS_TOLERANCE_CONFIG,
             ERRORS_TOLERANCE_CONFIG);
     return ErrorTolerance.valueOf(errorsTolerance.toUpperCase()).equals(ErrorTolerance.ALL);
+  }
+
+  boolean tolerateDataErrors() {
+    String errorsTolerance =
+        ConfigHelper.getOverrideOrFallback(
+            this,
+            AbstractConfig::getString,
+            OVERRIDE_ERRORS_TOLERANCE_CONFIG,
+            ERRORS_TOLERANCE_CONFIG);
+    return ErrorTolerance.valueOf(errorsTolerance.toUpperCase()).equals(ErrorTolerance.DATA);
   }
 
   public boolean isTimeseries() {
@@ -514,46 +527,54 @@ public class MongoSinkTopicConfig extends AbstractConfig {
 
   public WriteModelStrategy getWriteModelStrategy() {
     if (writeModelStrategy == null) {
-      writeModelStrategy =
-          configureInstance(
-              createInstance(
-                  WRITEMODEL_STRATEGY_CONFIG,
-                  getString(WRITEMODEL_STRATEGY_CONFIG),
-                  WriteModelStrategy.class));
+      writeModelStrategy = getWriteModelStrategyFromConfig(WRITEMODEL_STRATEGY_CONFIG);
     }
     return writeModelStrategy;
   }
 
-  public Optional<WriteModelStrategy> getDeleteOneWriteModelStrategy() {
+  public Optional<WriteModelStrategy> getDeleteWriteModelStrategy() {
     if (!getBoolean(DELETE_ON_NULL_VALUES_CONFIG)) {
       return Optional.empty();
     }
     if (deleteOneWriteModelStrategy == null) {
-      /*
-      NOTE: DeleteOneModel requires the key document which means that the only reasonable ID generation strategies are those
-      which refer to/operate on the key document. Thus currently this means the IdStrategy must be either:
+      if (DELETE_WRITEMODEL_STRATEGY_DEFAULT.equals(getString(DELETE_WRITEMODEL_STRATEGY_CONFIG))) {
 
-      FullKeyStrategy
-      PartialKeyStrategy
-      ProvidedInKeyStrategy
-      */
-      IdStrategy idStrategy = getIdStrategy();
-      if (!(idStrategy instanceof FullKeyStrategy)
-          && !(idStrategy instanceof PartialKeyStrategy)
-          && !(idStrategy instanceof ProvidedInKeyStrategy)) {
-        throw new ConnectConfigException(
-            DELETE_ON_NULL_VALUES_CONFIG,
-            getBoolean(DELETE_ON_NULL_VALUES_CONFIG),
-            format(
-                "%s can only be applied when the configured IdStrategy is an instance of: %s or %s or %s",
-                DeleteOneDefaultStrategy.class.getSimpleName(),
-                FullKeyStrategy.class.getSimpleName(),
-                PartialKeyStrategy.class.getSimpleName(),
-                ProvidedInKeyStrategy.class.getSimpleName()));
+        IdStrategy idStrategy = getIdStrategy();
+        if (idStrategy instanceof FullKeyStrategy
+            || idStrategy instanceof PartialKeyStrategy
+            || idStrategy instanceof ProvidedInKeyStrategy) {
+          deleteOneWriteModelStrategy = new DeleteOneDefaultStrategy(idStrategy);
+        } else {
+          /*
+          NOTE: DeleteOneModel requires the key document which means that the only reasonable ID generation strategies are those
+          which refer to/operate on the key document. Thus currently this means the IdStrategy must be either:
+
+          FullKeyStrategy
+          PartialKeyStrategy
+          ProvidedInKeyStrategy
+            */
+          throw new ConnectConfigException(
+              DELETE_ON_NULL_VALUES_CONFIG,
+              getBoolean(DELETE_ON_NULL_VALUES_CONFIG),
+              format(
+                  "%s can only be applied when the configured IdStrategy is an instance of: %s or %s or %s",
+                  DeleteOneDefaultStrategy.class.getSimpleName(),
+                  FullKeyStrategy.class.getSimpleName(),
+                  PartialKeyStrategy.class.getSimpleName(),
+                  ProvidedInKeyStrategy.class.getSimpleName()));
+        }
+      } else {
+        deleteOneWriteModelStrategy =
+            getWriteModelStrategyFromConfig(DELETE_WRITEMODEL_STRATEGY_CONFIG);
       }
-      deleteOneWriteModelStrategy = new DeleteOneDefaultStrategy(idStrategy);
     }
+
     return Optional.of(deleteOneWriteModelStrategy);
+  }
+
+  WriteModelStrategy getWriteModelStrategyFromConfig(final String strategyConfig) {
+    return configureInstance(
+        createInstance(strategyConfig, getString(strategyConfig), WriteModelStrategy.class));
   }
 
   Optional<CdcHandler> getCdcHandler() {
@@ -602,7 +623,6 @@ public class MongoSinkTopicConfig extends AbstractConfig {
     String prefix = format("%s%s.", TOPIC_OVERRIDE_PREFIX, topic);
     List<String> topicOverrides =
         props.keySet().stream().filter(k -> k.startsWith(prefix)).collect(Collectors.toList());
-
     Map<String, ConfigValue> results = new HashMap<>();
     Map<String, String> sinkTopicOriginals = createSinkTopicOriginals(topic, props);
 
@@ -792,28 +812,6 @@ public class MongoSinkTopicConfig extends AbstractConfig {
     group = "Writes";
     orderInGroup = 0;
     configDef.define(
-        MAX_NUM_RETRIES_CONFIG,
-        ConfigDef.Type.INT,
-        MAX_NUM_RETRIES_DEFAULT,
-        ConfigDef.Range.atLeast(0),
-        ConfigDef.Importance.MEDIUM,
-        MAX_NUM_RETRIES_DOC,
-        group,
-        ++orderInGroup,
-        ConfigDef.Width.MEDIUM,
-        MAX_NUM_RETRIES_DISPLAY);
-    configDef.define(
-        RETRIES_DEFER_TIMEOUT_CONFIG,
-        ConfigDef.Type.INT,
-        RETRIES_DEFER_TIMEOUT_DEFAULT,
-        ConfigDef.Range.atLeast(0),
-        ConfigDef.Importance.MEDIUM,
-        RETRIES_DEFER_TIMEOUT_DOC,
-        group,
-        ++orderInGroup,
-        ConfigDef.Width.MEDIUM,
-        RETRIES_DEFER_TIMEOUT_DISPLAY);
-    configDef.define(
         DELETE_ON_NULL_VALUES_CONFIG,
         ConfigDef.Type.BOOLEAN,
         DELETE_ON_NULL_VALUES_DEFAULT,
@@ -835,6 +833,17 @@ public class MongoSinkTopicConfig extends AbstractConfig {
         ConfigDef.Width.MEDIUM,
         WRITEMODEL_STRATEGY_DISPLAY);
     configDef.define(
+        DELETE_WRITEMODEL_STRATEGY_CONFIG,
+        ConfigDef.Type.STRING,
+        DELETE_WRITEMODEL_STRATEGY_DEFAULT,
+        Validators.matching(FULLY_QUALIFIED_CLASS_NAME),
+        ConfigDef.Importance.LOW,
+        WRITEMODEL_STRATEGY_DOC,
+        group,
+        ++orderInGroup,
+        ConfigDef.Width.MEDIUM,
+        DELETE_WRITEMODEL_STRATEGY_DISPLAY);
+    configDef.define(
         MAX_BATCH_SIZE_CONFIG,
         ConfigDef.Type.INT,
         MAX_BATCH_SIZE_DEFAULT,
@@ -845,6 +854,16 @@ public class MongoSinkTopicConfig extends AbstractConfig {
         ++orderInGroup,
         ConfigDef.Width.MEDIUM,
         MAX_BATCH_SIZE_DISPLAY);
+    configDef.define(
+        BULK_WRITE_ORDERED_CONFIG,
+        ConfigDef.Type.BOOLEAN,
+        BULK_WRITE_ORDERED_DEFAULT,
+        ConfigDef.Importance.MEDIUM,
+        BULK_WRITE_ORDERED_DOC,
+        group,
+        ++orderInGroup,
+        ConfigDef.Width.MEDIUM,
+        BULK_WRITE_ORDERED_DISPLAY);
     configDef.define(
         RATE_LIMITING_TIMEOUT_CONFIG,
         ConfigDef.Type.INT,

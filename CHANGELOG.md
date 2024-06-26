@@ -2,13 +2,114 @@
 
 ## Changelog
 
+## 1.13.0
+
+### Improvements
+- [KAFKA-404](https://jira.mongodb.org/browse/KAFKA-404) Support for extending MongoClient to allow for users to add custom auth such as AWS IAM / Assume Role.
+
+## 1.12.0
+
+### Improvements
+- [KAFKA-374](https://jira.mongodb.org/browse/KAFKA-374) Implement an error handler to address specific scenarios.
+
+
+## 1.11.2
+
+### Bug Fixes
+  - [KAFKA-396](https://jira.mongodb.org/browse/KAFKA-396) Improve error logging and handling. Fixes error level for broken change streams.
+  - [KAFKA-395](https://jira.mongodb.org/browse/KAFKA-395) Fix custom Delete write model strategy support
+
+## 1.11.1
+
+### Bug Fixes
+  - [KAFKA-391](https://jira.mongodb.org/browse/KAFKA-391) Add wildcard support for starts with field name matching
+  - [KAFKA-390](https://jira.mongodb.org/browse/KAFKA-390) Logging incompatible properties no longer NPEs on null values
+
+## 1.11.0
+
+### Improvements
+  - [KAFKA-274](https://jira.mongodb.org/browse/KAFKA-274) Made Debezium (DBZ) ddl events a noop
+  - [KAFKA-360](https://jira.mongodb.org/browse/KAFKA-360) Added configuration `change.stream.document.key.as.key` and defaults to true.
+    Previously, the resume token was used as the key, however, that limits the usefulness of tombstones and topic compaction. Set to false to revert.
+
+### Bug Fixes
+  - [KAFKA-378](https://jira.mongodb.org/browse/KAFKA-378) Changed connection uri configuration to password type and for security removed the legacy partition map.
+  - [KAFKA-360](https://jira.mongodb.org/browse/KAFKA-360) Fixed tombstones on delete by using the `documentKey` if available by default.
+
+## 1.10.0
+
+### Improvements
+  - [KAFKA-344](https://jira.mongodb.org/browse/KAFKA-344) Added connector name to JMX metrics
+  - [KAFKA-348](https://jira.mongodb.org/browse/KAFKA-348) Added support for SSL via configuration options
+  - [KAFKA-322](https://jira.mongodb.org/browse/KAFKA-322) Ensure configs from config providers are always parsed before validation
+
+## 1.9.1
+
+### Bug Fixes
+  - [KAFKA-349](https://jira.mongodb.org/browse/KAFKA-349) Further improvements to schema inference for documents nested in arrays.
+
+## 1.9.0
+
+### Improvements
+  - [KAFKA-331](https://jira.mongodb.org/browse/KAFKA-331) Report all exceptions to the DLQ when `mongo.errors.tolerance` is `"all"`
+  - [KAFKA-308](https://jira.mongodb.org/browse/KAFKA-308) Add the new `change.stream.full.document.before.change` config property
+  - [KAFKA-330](https://jira.mongodb.org/browse/KAFKA-330) Introduced `startup.mode = timestamp` that by default
+    corresponds to the default source connector behavior and actuates the new configuration property
+    `startup.mode.timestamp.start.at.operation.time` that allows users to configure `startAtOperationTime` on the change stream.
+    Deprecated the `copy.existing` property; deprecated properties are overridden by normal ones if there is a conflict.
+    `startup.mode = copy_existing` and `startup.mode.copy.existing.*` properties should be used instead of
+    `copy.existing = true` and `copy.existing.*` properties.
+  - [KAFKA-312](https://jira.mongodb.org/browse/KAFKA-312) Add the new `publish.full.document.only.tombstone.on.delete` config
+  - [KAFKA-343](https://jira.mongodb.org/browse/KAFKA-343) Improve schema inference for documents nested in arrays
+
+
+### Bug Fixes
+  - [KAFKA-337](https://jira.mongodb.org/browse/KAFKA-337) Fix case sensitive suggestions for enum recommender.
+  - [KAFKA-301](https://jira.mongodb.org/browse/KAFKA-301) ByteArrayRecordConverter now returns mutable documents, so post processing can occur.
+
+## 1.8.1
+
+### Bug Fixes
+  - [KAFKA-335](https://jira.mongodb.org/browse/KAFKA-335) Use type Attribute for attributes in JMX mbeans
+
+
+## 1.8.0
+
+### Improvements
+  - [KAFKA-304](https://jira.mongodb.org/browse/KAFKA-304) Monitoring and troubleshooting Kafka Connector improvements including JMX support. [Documentation](https://www.mongodb.com/docs/kafka-connector/current/monitoring/)
+  - [KAFKA-300](https://jira.mongodb.org/browse/KAFKA-300) Support DBZ change stream events in the CDC.
+  - [KAFKA-329](https://jira.mongodb.org/browse/KAFKA-329) Update java driver dependency to 4.7.0+
+  - [KAFKA-328](https://jira.mongodb.org/browse/KAFKA-328) Fix SLF4J usage issues
+
+
+## 1.7.0
+
+### Improvements
+  - [KAFKA-279](https://jira.mongodb.org/browse/KAFKA-279) Updated MongoDB Java driver dependency to 4.5.0.
+  - [KAFKA-257](https://jira.mongodb.org/browse/KAFKA-257) Improved reporting to sink connector's DLQ; see the documentation of the
+    [`errors.deadletterqueue.context.headers.enable`](https://docs.mongodb.com/kafka-connector/current/sink-connector/configuration-properties/error-handling/)
+    configuration property for more details.
+    Started to rely on retries in the MongoDB Java driver and stopped supporting the configuration properties
+    `max.num.retries`, `retries.defer.timeout`. If you have `retryWrites=false` specified in the `connection.uri` configuration property,
+    then retries are disabled for the sink connector; remove `retryWrites=false` from `connection.uri` if you want to enable retries.
+  - [KAFKA-253](https://jira.mongodb.org/browse/KAFKA-253) Added support for
+    [unordered](https://mongodb.github.io/mongo-java-driver/4.3/apidocs/mongodb-driver-core/com/mongodb/client/model/BulkWriteOptions.html#ordered(boolean))
+    [bulk writes](https://mongodb.github.io/mongo-java-driver/4.3/apidocs/mongodb-driver-sync/com/mongodb/client/MongoCollection.html#bulkWrite(java.util.List,com.mongodb.client.model.BulkWriteOptions))
+    via the new
+    [`bulk.write.ordered`](https://docs.mongodb.com/kafka-connector/current/sink-connector/configuration-properties/connector-message/)
+    configuration property.
+  - [KAFKA-265](https://jira.mongodb.org/browse/KAFKA-265) Added support for
+     [allowDiskUse](https://mongodb.github.io/mongo-java-driver/4.4/apidocs/mongodb-driver-sync/com/mongodb/client/AggregateIterable.html#allowDiskUse(java.lang.Boolean))
+    when copying existing data via the new
+    [`copy.existing.allow.disk.use`](https://docs.mongodb.com/kafka-connector/current/source-connector/configuration-properties/copy-existing/)
+    configuration property.
 
 ## 1.6.1
 
 ### Bug Fixes
   - [KAFKA-238](https://jira.mongodb.org/browse/KAFKA-238) Fix connection validator user privilege check
   - [KAFKA-245](https://jira.mongodb.org/browse/KAFKA-245) Fix UuidProvidedIn[Key|Value]Strategy classes.
-  - [KAFKA-244](https://jira.mongodb.org/browse/KAFKA-244)	Update java driver dependency to 4.3.1 in the combined jars]
+  - [KAFKA-244](https://jira.mongodb.org/browse/KAFKA-244) Update java driver dependency to 4.3.1 in the combined jars]
 
 ## 1.6.0
 

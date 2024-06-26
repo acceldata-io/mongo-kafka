@@ -39,6 +39,7 @@ import org.apache.kafka.connect.sink.SinkConnector;
 import com.mongodb.kafka.connect.sink.MongoSinkConfig;
 import com.mongodb.kafka.connect.sink.MongoSinkTask;
 import com.mongodb.kafka.connect.sink.MongoSinkTopicConfig;
+import com.mongodb.kafka.connect.util.ConfigHelper;
 
 public class MongoSinkConnector extends SinkConnector {
   private static final List<String> REQUIRED_SINK_ACTIONS = asList("insert", "update", "remove");
@@ -80,16 +81,20 @@ public class MongoSinkConnector extends SinkConnector {
 
   @Override
   public Config validate(final Map<String, String> connectorConfigs) {
-    Config config = super.validate(connectorConfigs);
-
     MongoSinkConfig sinkConfig;
     try {
       sinkConfig = new MongoSinkConfig(connectorConfigs);
     } catch (Exception e) {
-      return config;
+      return super.validate(connectorConfigs);
     }
 
-    validateCanConnect(config, CONNECTION_URI_CONFIG)
+    final Map<String, String> resolvedConnectorConfigs =
+        ConfigHelper.evaluateConfigValues(connectorConfigs, sinkConfig);
+
+    final Config tempConfig = super.validate(resolvedConnectorConfigs);
+    final Config config = ConfigHelper.evaluateConfigValues(tempConfig, sinkConfig);
+
+    validateCanConnect(sinkConfig, config, CONNECTION_URI_CONFIG)
         .ifPresent(
             client -> {
               try {

@@ -24,6 +24,7 @@
     <suppress checks="MethodLength" files=".*MongoSinkTopicConfig.java"/>
     <suppress checks="MethodLength" files=".*MongoSourceConfig.java"/>
     <suppress checks="LineLength" files=".*RecordConverterTest.java"/>
+    <suppress checks="LineLength" files=".*TaskStatistics.java"/>
     <suppress checks="MethodLength" files=".*RecordConverterTest.java"/>
 
     <suppress checks="Javadoc*" files="com[\\/]mongodb[\\/]kafka[\\/]connect[\\/]"/>
@@ -32,8 +33,12 @@
     <suppress checks="VisibilityModifier" files=".*RegExpSettings.java"/>
     <suppress checks="VisibilityModifier" files=".*RenameByRegExp.java"/>
 
+    <!-- Versions (generated code) -->
+    <suppress checks="[a-zA-Z0-9]*" files="com[\\/]mongodb[\\/]kafka[\\/]connect[\\/]Versions.java" />
+
     <!--Test code-->
     <suppress checks="[a-zA-Z0-9]*" files="com[\\/]mongodb[\\/]kafka[\\/]connect[\\/]avro[\\/]" />
     <suppress checks="[a-zA-Z0-9]*" files="com[\\/]mongodb[\\/]kafka[\\/]connect[\\/]embedded[\\/]" />
     <suppress checks="[a-zA-Z0-9]*" files="com[\\/]mongodb[\\/]kafka[\\/]connect[\\/]mongodb[\\/]" />
+    <suppress checks="MethodLength" files=".*DefaultTopicMapperTest.java"/>
 </suppressions>

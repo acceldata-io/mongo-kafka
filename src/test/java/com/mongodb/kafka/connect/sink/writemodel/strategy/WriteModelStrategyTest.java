@@ -32,8 +32,6 @@ import java.util.Map;
 import org.apache.kafka.connect.errors.DataException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 
 import org.bson.BsonDateTime;
 import org.bson.BsonDocument;
@@ -49,7 +47,6 @@ import com.mongodb.kafka.connect.sink.MongoSinkTopicConfig;
 import com.mongodb.kafka.connect.sink.converter.SinkDocument;
 import com.mongodb.kafka.connect.sink.processor.id.strategy.PartialKeyStrategy;
 
-@RunWith(JUnitPlatform.class)
 class WriteModelStrategyTest {
   private static final InsertOneDefaultStrategy INSERT_ONE_DEFAULT_STRATEGY =
       new InsertOneDefaultStrategy();
@@ -59,6 +56,8 @@ class WriteModelStrategyTest {
       new ReplaceOneDefaultStrategy();
   private static final ReplaceOneBusinessKeyStrategy REPLACE_ONE_BUSINESS_KEY_STRATEGY =
       new ReplaceOneBusinessKeyStrategy();
+  private static final UpdateOneDefaultStrategy UPDATE_ONE_DEFAULT_STRATEGY =
+      new UpdateOneDefaultStrategy();
   private static final UpdateOneTimestampsStrategy UPDATE_ONE_TIMESTAMPS_STRATEGY =
       new UpdateOneTimestampsStrategy();
   private static final UpdateOneBusinessKeyTimestampStrategy
@@ -232,6 +231,31 @@ class WriteModelStrategyTest {
     assertTrue(
         writeModel.getReplaceOptions().isUpsert(),
         "replacement expected to be done in upsert mode");
+  }
+
+  @Test
+  @DisplayName(
+      "when sink document is valid for UpdateOneDefaultStrategy then correct UpdateOneModel")
+  void testUpdateOneDefaultStrategyWithValidSinkDocument() {
+    WriteModel<BsonDocument> result =
+        UPDATE_ONE_DEFAULT_STRATEGY.createWriteModel(new SinkDocument(null, VALUE_DOC.clone()));
+    assertTrue(result instanceof UpdateOneModel, "result expected to be of type UpdateOneModel");
+
+    UpdateOneModel<BsonDocument> writeModel = (UpdateOneModel<BsonDocument>) result;
+
+    BsonDocument setValuesDocument = VALUE_DOC.clone();
+    setValuesDocument.remove("_id");
+    BsonDocument expectedSetDocument = new BsonDocument("$set", setValuesDocument);
+
+    assertEquals(
+        expectedSetDocument,
+        writeModel.getUpdate(),
+        "replacement doc not matching what is expected");
+    assertTrue(
+        writeModel.getFilter() instanceof BsonDocument,
+        "filter expected to be of type BsonDocument");
+    assertEquals(ID_FILTER, writeModel.getFilter());
+    assertTrue(writeModel.getOptions().isUpsert(), "update expected to be done in upsert mode");
   }
 
   @Test
@@ -415,6 +439,10 @@ class WriteModelStrategyTest {
                 () ->
                     REPLACE_ONE_BUSINESS_KEY_PARTIAL_STRATEGY.createWriteModel(
                         SINK_DOCUMENT_EMPTY)),
+        () ->
+            assertThrows(
+                DataException.class,
+                () -> UPDATE_ONE_DEFAULT_STRATEGY.createWriteModel(SINK_DOCUMENT_EMPTY)),
         () ->
             assertThrows(
                 DataException.class,

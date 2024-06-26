@@ -25,6 +25,8 @@ import static com.mongodb.kafka.connect.sink.MongoSinkConfig.createOverrideKey;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.CHANGE_DATA_CAPTURE_HANDLER_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.COLLECTION_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.DATABASE_CONFIG;
+import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.DELETE_ON_NULL_VALUES_CONFIG;
+import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.DELETE_WRITEMODEL_STRATEGY_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.DOCUMENT_ID_STRATEGY_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.FIELD_RENAMER_MAPPING_CONFIG;
 import static com.mongodb.kafka.connect.sink.MongoSinkTopicConfig.FIELD_RENAMER_REGEXP_CONFIG;
@@ -70,6 +72,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -80,8 +83,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestFactory;
-import org.junit.platform.runner.JUnitPlatform;
-import org.junit.runner.RunWith;
 
 import com.mongodb.kafka.connect.sink.cdc.debezium.mongodb.MongoDbHandler;
 import com.mongodb.kafka.connect.sink.cdc.debezium.rdbms.RdbmsHandler;
@@ -103,6 +104,7 @@ import com.mongodb.kafka.connect.sink.processor.id.strategy.PartialValueStrategy
 import com.mongodb.kafka.connect.sink.processor.id.strategy.ProvidedInKeyStrategy;
 import com.mongodb.kafka.connect.sink.processor.id.strategy.ProvidedInValueStrategy;
 import com.mongodb.kafka.connect.sink.processor.id.strategy.UuidStrategy;
+import com.mongodb.kafka.connect.sink.writemodel.strategy.CustomDeleteWriteModelStrategy;
 import com.mongodb.kafka.connect.sink.writemodel.strategy.DefaultWriteModelStrategy;
 import com.mongodb.kafka.connect.sink.writemodel.strategy.DeleteOneBusinessKeyStrategy;
 import com.mongodb.kafka.connect.sink.writemodel.strategy.DeleteOneDefaultStrategy;
@@ -115,7 +117,6 @@ import com.mongodb.kafka.connect.sink.writemodel.strategy.WriteModelStrategy;
 
 import com.github.jcustenborder.kafka.connect.utils.config.MarkdownFormatter;
 
-@RunWith(JUnitPlatform.class)
 class MongoSinkConfigTest {
   private static final Pattern EMPTY_PATTERN = Pattern.compile("");
 
@@ -775,6 +776,101 @@ class MongoSinkConfigTest {
                         + cfg.getTopic()
                         + " strategy NOT of type "
                         + candidates.get(cfg.getTopic())));
+  }
+
+  @TestFactory
+  @DisplayName("test get single valid delete write model strategy")
+  Collection<DynamicTest> testGetSingleValidDeleteWriteModelStrategy() {
+    List<DynamicTest> tests = new ArrayList<>();
+
+    HashMap<String, Class> candidates =
+        new HashMap<String, Class>() {
+          {
+            put("", DeleteOneDefaultStrategy.class);
+            put(InsertOneDefaultStrategy.class.getName(), InsertOneDefaultStrategy.class);
+            put(DeleteOneDefaultStrategy.class.getName(), DeleteOneDefaultStrategy.class);
+            put(ReplaceOneBusinessKeyStrategy.class.getName(), ReplaceOneBusinessKeyStrategy.class);
+            put(ReplaceOneDefaultStrategy.class.getName(), ReplaceOneDefaultStrategy.class);
+            put(UpdateOneTimestampsStrategy.class.getName(), UpdateOneTimestampsStrategy.class);
+            put(
+                UpdateOneBusinessKeyTimestampStrategy.class.getName(),
+                UpdateOneBusinessKeyTimestampStrategy.class);
+            put(DeleteOneBusinessKeyStrategy.class.getName(), DeleteOneBusinessKeyStrategy.class);
+          }
+        };
+
+    candidates.forEach(
+        (key, value) -> {
+          Map<String, String> map = createConfigMap();
+          map.put(DELETE_ON_NULL_VALUES_CONFIG, "true");
+          map.put(DOCUMENT_ID_STRATEGY_CONFIG, FullKeyStrategy.class.getName());
+          if (!key.isEmpty()) {
+            map.put(DELETE_WRITEMODEL_STRATEGY_CONFIG, key);
+          }
+          MongoSinkConfig cfg = new MongoSinkConfig(map);
+          assertTrue(
+              cfg.getMongoSinkTopicConfig(TEST_TOPIC).getDeleteWriteModelStrategy().isPresent());
+          WriteModelStrategy writeModelStrategy =
+              cfg.getMongoSinkTopicConfig(TEST_TOPIC).getDeleteWriteModelStrategy().get();
+          tests.add(
+              dynamicTest(
+                  key.isEmpty()
+                      ? "check delete write model strategy for default config"
+                      : "check delete write model strategy for config "
+                          + DELETE_WRITEMODEL_STRATEGY_CONFIG
+                          + "="
+                          + key,
+                  () ->
+                      assertAll(
+                          "check for non-null and correct type",
+                          () ->
+                              assertNotNull(
+                                  writeModelStrategy, "delete write model strategy was null"),
+                          () ->
+                              assertTrue(
+                                  value.isInstance(writeModelStrategy),
+                                  "delete write model strategy NOT of type " + value.getName()))));
+        });
+
+    return tests;
+  }
+
+  @Test
+  @DisplayName("test Default DELETE_WRITEMODEL_STRATEGY_CONFIG")
+  void testDefaultDeleteWriteModelStrategyConfig() {
+    Map<String, String> map = createConfigMap();
+
+    map.put(DELETE_ON_NULL_VALUES_CONFIG, "true");
+    map.put(DOCUMENT_ID_STRATEGY_CONFIG, FullKeyStrategy.class.getName());
+    MongoSinkConfig cfg = new MongoSinkConfig(map);
+
+    Optional<WriteModelStrategy> optionalDeleteWriteModelStrategy =
+        cfg.getMongoSinkTopicConfig(TEST_TOPIC).getDeleteWriteModelStrategy();
+    assertTrue(optionalDeleteWriteModelStrategy.isPresent());
+
+    WriteModelStrategy writeModelStrategy = optionalDeleteWriteModelStrategy.get();
+    assertTrue(writeModelStrategy instanceof DeleteOneDefaultStrategy);
+
+    assertTrue(
+        ((DeleteOneDefaultStrategy) writeModelStrategy).getIdStrategy() instanceof FullKeyStrategy,
+        "IdStrategy is FullKeyStrategy");
+  }
+
+  @Test
+  @DisplayName("test Custom DELETE_WRITEMODEL_STRATEGY_CONFIG")
+  void testCustomDeleteWriteModelStrategyConfig() {
+    Map<String, String> map = createConfigMap();
+
+    map.put(DELETE_ON_NULL_VALUES_CONFIG, "true");
+    map.put(DELETE_WRITEMODEL_STRATEGY_CONFIG, CustomDeleteWriteModelStrategy.class.getName());
+    MongoSinkConfig cfg = new MongoSinkConfig(map);
+
+    Optional<WriteModelStrategy> optionalDeleteWriteModelStrategy =
+        cfg.getMongoSinkTopicConfig(TEST_TOPIC).getDeleteWriteModelStrategy();
+    assertTrue(optionalDeleteWriteModelStrategy.isPresent());
+
+    WriteModelStrategy writeModelStrategy = optionalDeleteWriteModelStrategy.get();
+    assertTrue(writeModelStrategy instanceof CustomDeleteWriteModelStrategy);
   }
 
   @Test
