@@ -39,7 +39,7 @@ plugins {
 }
 
 group = "org.mongodb.kafka"
-version = "1.13.0"
+version = "1.13.0-11"
 description = "The official MongoDB Apache Kafka Connect Connector."
 
 repositories {
@@ -108,7 +108,7 @@ tasks.withType<JavaCompile> {
     options.release.set(8)
 }
 
-val defaultJdkVersion = 17
+val defaultJdkVersion = 11
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(defaultJdkVersion))
