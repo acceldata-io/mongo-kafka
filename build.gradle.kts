@@ -57,6 +57,7 @@ extra.apply {
     set("mongodbDriverVersion", "[4.3,4.3.99)")
     set("kafkaVersion", "2.6.0")
     set("avroVersion", "1.11.4")
+    set("jacksonVersion", "2.15.4")
 
     // Testing dependencies
     set("junitJupiterVersion", "5.4.0")
@@ -78,6 +79,7 @@ dependencies {
     implementation("org.apache.kafka:connect-api:${project.extra["kafkaVersion"]}")
     implementation("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
     implementation("org.apache.avro:avro:${project.extra["avroVersion"]}")
+    implementation(platform("com.fasterxml.jackson:jackson-bom:${project.extra["jacksonVersion"]}"))
 
     mongoDependencies("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
 
