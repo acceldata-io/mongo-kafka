@@ -57,6 +57,7 @@ extra.apply {
     set("mongodbDriverVersion", "[4.3,4.3.99)")
     set("kafkaVersion", "2.6.0")
     set("avroVersion", "1.11.5")
+    set("jacksonVersion", "2.16.1")
 
     // Testing dependencies
     set("junitJupiterVersion", "5.4.0")
@@ -75,12 +76,14 @@ val mongoDependencies: Configuration by configurations.creating
 val mongoAndAvroDependencies: Configuration by configurations.creating
 
 dependencies {
+    implementation(platform("com.fasterxml.jackson:jackson-bom:${project.extra["jacksonVersion"]}"))
     implementation("org.apache.kafka:connect-api:${project.extra["kafkaVersion"]}")
     implementation("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
     implementation("org.apache.avro:avro:${project.extra["avroVersion"]}")
 
     mongoDependencies("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
 
+    mongoAndAvroDependencies(platform("com.fasterxml.jackson:jackson-bom:${project.extra["jacksonVersion"]}"))
     mongoAndAvroDependencies("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
     mongoAndAvroDependencies("org.apache.avro:avro:${project.extra["avroVersion"]}")
 
@@ -93,6 +96,7 @@ dependencies {
     // Integration Tests
     testImplementation("org.apache.curator:curator-test:${project.extra["curatorVersion"]}")
     testImplementation("com.github.jcustenborder.kafka.connect:connect-utils:${project.extra["connectUtilsVersion"]}")
+    testImplementation(platform("com.fasterxml.jackson:jackson-bom:${project.extra["jacksonVersion"]}"))
     testImplementation(platform("io.confluent:kafka-schema-registry-parent:${project.extra["confluentVersion"]}"))
     testImplementation(group = "com.google.guava", name = "guava")
     testImplementation(group = "io.confluent", name = "kafka-schema-registry")
