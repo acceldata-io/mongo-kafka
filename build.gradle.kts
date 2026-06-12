@@ -53,7 +53,7 @@ repositories {
 
 extra.apply {
     set("mongodbDriverVersion", "[5.8,5.8.99]")
-    set("kafkaVersion", "3.9.2")
+    set("kafkaVersion", "4.3.0")
     set("avroVersion", "1.12.1")
 }
 
@@ -154,7 +154,7 @@ dependencies {
 
 tasks.withType<JavaCompile> {
     options.encoding = "UTF-8"
-    options.release.set(8)
+    options.release.set(17)
 }
 
 val defaultJdkVersion = 17
