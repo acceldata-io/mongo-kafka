@@ -45,10 +45,20 @@ group = "org.mongodb.kafka"
 version = "3.0.0.3.3.6.5-SNAPSHOT"
 description = "The official MongoDB Apache Kafka Connect Connector."
 
+val mavenUrl = findProperty("mavenUrl") as String? ?: ""
+val snapMavenUrl = findProperty("snapMavenUrl") as String? ?: ""
+val mavenUsername = findProperty("mavenUsername") as String? ?: ""
+val mavenPassword = findProperty("mavenPassword") as String? ?: ""
+val mavenProxyUrl = findProperty("mavenProxyUrl") as String? ?: ""
+
 repositories {
-    mavenCentral()
-    maven("https://packages.confluent.io/maven/")
-    maven("https://jitpack.io")
+    if (mavenProxyUrl.isNotEmpty()) {
+        maven(mavenProxyUrl)
+    } else {
+        mavenCentral()
+        maven("https://packages.confluent.io/maven/")
+        maven("https://jitpack.io")
+    }
 }
 
 extra.apply {
@@ -370,6 +380,13 @@ tasks.register<Jar>("javadocJar") {
 
 publishing {
     publications {
+        create<MavenPublication>("allJar") {
+            groupId = "org.mongodb.kafka"
+            artifactId = "mongo-kafka"
+            version = project.version.toString()
+            artifact(tasks["allJar"])
+        }
+
         create<MavenPublication>("mavenJava") {
             artifactId = "mongo-kafka-connect"
             from(components["java"])
@@ -405,6 +422,26 @@ publishing {
             }
         }
     }
+
+    /*
+     * Add to ~/.gradle/gradle.properties to publish to Nexus:
+     * mavenUrl=https://repo1.acceldata.dev/repository/odp-staging-release/
+     * snapMavenUrl=https://repo1.acceldata.dev/repository/odp-staging-snapshot/
+     * mavenUsername=xxx
+     * mavenPassword=xxx
+     */
+    val publishUrl = if (version.toString().endsWith("SNAPSHOT")) snapMavenUrl else mavenUrl
+    if (publishUrl.isNotEmpty()) {
+        repositories {
+            maven {
+                url = uri(publishUrl)
+                credentials {
+                    username = mavenUsername
+                    password = mavenPassword
+                }
+            }
+        }
+    }
 }
 
 nexusPublishing {
@@ -432,11 +469,13 @@ nexusPublishing {
     }
 }
 
-signing {
-    val signingKey: String? by project
-    val signingPassword: String? by project
-    useInMemoryPgpKeys(signingKey, signingPassword)
-    sign(publishing.publications["mavenJava"])
+if (!version.toString().endsWith("SNAPSHOT")) {
+    signing {
+        val signingKey: String? by project
+        val signingPassword: String? by project
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign(publishing.publications["mavenJava"])
+    }
 }
 
 tasks.javadoc {
