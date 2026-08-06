@@ -42,10 +42,20 @@ group = "org.mongodb.kafka"
 version = "2.0.0.3.4.3.0-1"
 description = "The official MongoDB Apache Kafka Connect Connector."
 
+val mavenUrl = findProperty("mavenUrl") as String? ?: ""
+val snapMavenUrl = findProperty("snapMavenUrl") as String? ?: ""
+val mavenUsername = findProperty("mavenUsername") as String? ?: ""
+val mavenPassword = findProperty("mavenPassword") as String? ?: ""
+val mavenProxyUrl = findProperty("mavenProxyUrl") as String? ?: ""
+
 repositories {
-    mavenCentral()
-    maven("https://packages.confluent.io/maven/")
-    maven("https://jitpack.io")
+    if (mavenProxyUrl.isNotEmpty()) {
+        maven(mavenProxyUrl)
+    } else {
+        mavenCentral()
+        maven("https://packages.confluent.io/maven/")
+        maven("https://jitpack.io")
+    }
 }
 
 extra.apply {
@@ -297,6 +307,13 @@ tasks.register<Jar>("javadocJar") {
 
 publishing {
     publications {
+        create<MavenPublication>("allJar") {
+            groupId = "org.mongodb.kafka"
+            artifactId = "mongo-kafka"
+            version = project.version.toString()
+            artifact(tasks["allJar"])
+        }
+
         create<MavenPublication>("mavenJava") {
             artifactId = "mongo-kafka-connect"
             from(components["java"])
@@ -333,26 +350,33 @@ publishing {
         }
     }
 
-    repositories {
-        maven {
-            val snapshotsRepoUrl = URI("https://oss.sonatype.org/content/repositories/snapshots/")
-            val releasesRepoUrl = URI("https://oss.sonatype.org/service/local/staging/deploy/maven2/")
-            url = if (version.toString().endsWith("SNAPSHOT")) snapshotsRepoUrl else releasesRepoUrl
-            credentials {
-                val nexusUsername: String? by project
-                val nexusPassword: String? by project
-                username = nexusUsername ?: ""
-                password = nexusPassword ?: ""
+    if (mavenUrl.isNotEmpty() || snapMavenUrl.isNotEmpty()) {
+        repositories {
+            maven {
+                /*
+                 * Add to ~/.gradle/gradle.properties to publish to Nexus:
+                 * mavenUrl=https://repo1.acceldata.dev/repository/odp-staging-release/
+                 * snapMavenUrl=https://repo1.acceldata.dev/repository/odp-staging-snapshot/
+                 * mavenUsername=xxx
+                 * mavenPassword=xxx
+                 */
+                url = URI(if (version.toString().endsWith("SNAPSHOT")) snapMavenUrl else mavenUrl)
+                credentials {
+                    username = mavenUsername
+                    password = mavenPassword
+                }
             }
         }
     }
 }
 
-signing {
-    val signingKey: String? by project
-    val signingPassword: String? by project
-    useInMemoryPgpKeys(signingKey, signingPassword)
-    sign(publishing.publications["mavenJava"])
+if (!version.toString().endsWith("SNAPSHOT")) {
+    signing {
+        val signingKey: String? by project
+        val signingPassword: String? by project
+        useInMemoryPgpKeys(signingKey, signingPassword)
+        sign(publishing.publications["mavenJava"])
+    }
 }
 
 tasks.javadoc {
