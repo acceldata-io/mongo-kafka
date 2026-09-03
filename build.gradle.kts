@@ -42,7 +42,7 @@ plugins {
 }
 
 group = "org.mongodb.kafka"
-version = "3.0.0.3.3.6.5-SNAPSHOT"
+version = "3.0.0.3.4.3.0-SNAPSHOT"
 description = "The official MongoDB Apache Kafka Connect Connector."
 
 val mavenUrl = findProperty("mavenUrl") as String? ?: ""
