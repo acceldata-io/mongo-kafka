@@ -54,13 +54,23 @@ extra.apply {
     set("avroVersion", "1.12.0")
 }
 
-val mongoDependencies: Configuration by configurations.creating
-val mongoAndAvroDependencies: Configuration by configurations.creating
+val mongoDependencies: Configuration by configurations.creating {
+    // OCR-2456: Kafka Connect supplies SLF4J. Keep it out of the fat jars.
+    exclude(group = "org.slf4j")
+}
+val mongoAndAvroDependencies: Configuration by configurations.creating {
+    exclude(group = "org.slf4j")
+}
 
 dependencies {
     implementation("org.apache.kafka:connect-api:${project.extra["kafkaVersion"]}")
-    implementation("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
-    implementation("org.apache.avro:avro:${project.extra["avroVersion"]}")
+    compileOnly("org.slf4j:slf4j-api:1.7.36")
+    implementation("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}") {
+        exclude(group = "org.slf4j")
+    }
+    implementation("org.apache.avro:avro:${project.extra["avroVersion"]}") {
+        exclude(group = "org.slf4j")
+    }
 
     mongoDependencies("org.mongodb:mongodb-driver-sync:${project.extra["mongodbDriverVersion"]}")
 
@@ -268,6 +278,9 @@ tasks.register<ShadowJar>("allJar") {
 
 tasks.withType<ShadowJar> {
     archiveAppendix.set("connect")
+    exclude("org/slf4j/**")
+    exclude("META-INF/maven/org.slf4j/**")
+    exclude("META-INF/services/org.slf4j.spi.SLF4JServiceProvider")
     doLast {
         val fatJar = archiveFile.get().asFile
         val fatJarSize = "%.4f".format(fatJar.length().toDouble() / (1_000 * 1_000))
