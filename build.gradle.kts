@@ -42,7 +42,7 @@ plugins {
 }
 
 group = "org.mongodb.kafka"
-version = "3.0.0.3.3.6.6-SNAPSHOT"
+version = "3.0.0.3.4.3.0-SNAPSHOT"
 description = "The official MongoDB Apache Kafka Connect Connector."
 
 val mavenUrl = findProperty("mavenUrl") as String? ?: ""
@@ -63,7 +63,7 @@ repositories {
 
 extra.apply {
     set("mongodbDriverVersion", "[5.8,5.8.99]")
-    set("kafkaVersion", "4.3.0")
+    set("kafkaVersion", "4.3.1")
     set("avroVersion", "1.12.1")
 }
 
